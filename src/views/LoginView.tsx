@@ -1,0 +1,4 @@
+import { useState } from "react";
+import { Button } from "../components/ui";
+import { messages as m } from "../constants/messages";
+export const LoginView = ({ onLogin, error }: { onLogin: (username: string, password: string) => Promise<void>; error: string }) => { const [username, setUsername] = useState(""); const [password, setPassword] = useState(""); return <main className="loading"><form onSubmit={(event) => { event.preventDefault(); void onLogin(username, password); }}><h1>{m.appName}</h1><label>{m.username}<input value={username} onChange={(event) => setUsername(event.target.value)} /></label><label>{m.password}<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error && <p className="error-banner">{error}</p>}<Button type="submit">{m.signIn}</Button></form></main>; };
