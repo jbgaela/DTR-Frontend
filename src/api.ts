@@ -1,5 +1,15 @@
 import { messages } from "./constants/messages";
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export type DayType = "WORKDAY" | "REST_DAY" | "HOLIDAY" | "LEAVE" | "ABSENT";
 export type CalculationMode = "AUTO" | "OVERRIDE";
 
@@ -64,7 +74,7 @@ const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...options });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error?.message || messages.requestFailed);
+    throw new ApiError(response.status, body.error?.message || messages.requestFailed);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
