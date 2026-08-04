@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LoadingState } from "./components/LoadingState";
 import { Button } from "./components/ui";
 import { messages as m } from "./constants/messages";
 import { useDtrApp } from "./hooks/useDtrApp";
@@ -25,15 +26,15 @@ export const App = () => {
   const [view, setView] = useState<View>("dashboard");
   const state = useDtrApp();
 
-  if (state.loading) return <main className="loading">{m.appName}</main>;
+  if (state.blockingLoading) return <LoadingState />;
   if (!state.authenticated) return <LoginView onLogin={state.login} error={state.error} />;
-  if (state.error && !state.period) return <main className="loading"><p>{state.error}</p><Button onClick={() => void state.load()}>{m.save}</Button></main>;
+  if (state.error && !state.period) return <main className="fatal-load"><section className="fatal-load-card"><div className="brand-mark" aria-hidden="true">D</div><p className="eyebrow">{m.appName}</p><h1>{m.loadErrorTitle}</h1><p className="error-banner" role="alert">{state.error}</p><Button onClick={() => void state.retryLoad()}>{m.retry}</Button></section></main>;
   if (!state.period) return null;
 
   const openDate = (date: string) => { state.setSelectedDate(date); setView("daily"); };
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-mark">D</div><div><strong>{m.appName}</strong><span>{m.appSubtitle}</span></div></div><nav>{navigation.map((item) => <button key={item.view} className={view === item.view ? "nav-item active" : "nav-item"} onClick={() => setView(item.view)}>{item.label}</button>)}</nav><div className="sidebar-footer">{state.profile.employeeName || m.missingName}</div></aside>
-    <main className="main-content"><header className="topbar"><div><p className="eyebrow">{m.currentPeriod}</p><h1>{state.period.startDate}{m.periodRangeSeparator}{state.period.endDate}</h1></div><form className="cutoff-form" onSubmit={(event) => { event.preventDefault(); void state.load(state.cutoffStart, state.cutoffEnd); }}><label><span>{m.cutoffStart}</span><input value={state.cutoffStart} placeholder={m.dateFormat} aria-label={m.cutoffStart} onChange={(event) => state.setCutoffStart(event.target.value)} /></label><label><span>{m.cutoffEnd}</span><input value={state.cutoffEnd} placeholder={m.dateFormat} aria-label={m.cutoffEnd} onChange={(event) => state.setCutoffEnd(event.target.value)} /></label><Button type="submit">{m.applyCutoff}</Button></form><div className="topbar-actions"><span className="status-dot" /> {state.profile.timezone}</div></header>{state.notice && <div className="notice">{state.notice}</div>}{state.error && <div className="error-banner">{state.error}</div>}
+    <main className="main-content"><header className="topbar"><div><p className="eyebrow">{m.currentPeriod}</p><h1>{state.period.startDate}{m.periodRangeSeparator}{state.period.endDate}</h1></div><form className="cutoff-form" onSubmit={(event) => { event.preventDefault(); void state.refreshPeriod(state.cutoffStart, state.cutoffEnd); }}><label><span>{m.cutoffStart}</span><input disabled={state.refreshing} value={state.cutoffStart} placeholder={m.dateFormat} aria-label={m.cutoffStart} onChange={(event) => state.setCutoffStart(event.target.value)} /></label><label><span>{m.cutoffEnd}</span><input disabled={state.refreshing} value={state.cutoffEnd} placeholder={m.dateFormat} aria-label={m.cutoffEnd} onChange={(event) => state.setCutoffEnd(event.target.value)} /></label><Button disabled={state.refreshing} type="submit">{state.refreshing ? m.loadingCutoff : m.applyCutoff}</Button></form><div className="topbar-actions"><span className="status-dot" /> {state.profile.timezone}</div></header>{state.notice && <div className="notice">{state.notice}</div>}{state.error && <div className="error-banner">{state.error}</div>}
       {view === "dashboard" && <DashboardView period={state.period} totals={state.totals} dates={state.dates} onSelect={openDate} />}
       {view === "daily" && state.currentRecord && <DailyEntryView record={state.currentRecord} dates={state.dates} selectedDate={state.selectedDate} onDate={state.setSelectedDate} onSave={state.saveDay} onClear={() => void state.clearDay()} />}
       {view === "review" && <ReviewView period={state.period} onSelect={openDate} />}

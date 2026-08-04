@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { DailyRecordInput, LeaveRequest, Period, Profile } from "../api";
+import type { CurrentResponse, DailyRecordInput, LeaveRequest, Period, Profile } from "../api";
 import { api } from "../api";
 import { messages as m } from "../constants/messages";
 import { currentMonthRange, todayInput } from "../domain/date";
@@ -18,7 +18,8 @@ export const useDtrApp = () => {
   const [leave, setLeave] = useState<LeaveRequest>(emptyLeave);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [blockingLoading, setBlockingLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const dates = useMemo(() => period ? dateRange(period.startDate, period.endDate) : [], [period]);
   const records = period?.dailyRecords || [];
@@ -26,26 +27,63 @@ export const useDtrApp = () => {
   const totals = records.reduce((sum, record) => ({ regular: sum.regular + record.regularMinutes, overtime: sum.overtime + record.regularOtMinutes, nightOt: sum.nightOt + record.nightDiffOtMinutes, rest: sum.rest + record.restDayMinutes + record.restDayOtMinutes }), { regular: 0, overtime: 0, nightOt: 0, rest: 0 });
 
   const showNotice = (value: string) => { setNotice(value); window.setTimeout(() => setNotice(""), 2500); };
-  const load = async (startDate = cutoffStart, endDate = cutoffEnd) => {
+  const applyCurrent = (data: CurrentResponse) => {
+    setAuthenticated(true);
+    setPeriod(data.period);
+    setProfile(data.profile);
+    setSelectedDate(data.period.startDate);
+    setCutoffStart(data.period.startDate);
+    setCutoffEnd(data.period.endDate);
+    setLeave(data.period.leaveRequest || { ...emptyLeave, dateFiled: todayInput() });
+  };
+  const fetchPeriod = async (startDate: string, endDate: string) => {
     try {
-      setLoading(true);
       const data = await api.current(startDate, endDate);
-      setAuthenticated(true);
-      setPeriod(data.period);
-      setProfile(data.profile);
-      setSelectedDate(data.period.startDate);
-      setCutoffStart(data.period.startDate);
-      setCutoffEnd(data.period.endDate);
-      setLeave(data.period.leaveRequest || { ...emptyLeave, dateFiled: todayInput() });
+      applyCurrent(data);
       setError("");
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : m.loadError);
-    } finally {
-      setLoading(false);
+      return false;
     }
   };
-  useEffect(() => { void api.session().then(() => load()).catch(() => { setAuthenticated(false); setLoading(false); }); }, []);
-  const login = async (username: string, password: string) => { try { await api.login(username, password); setAuthenticated(true); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : m.loadError); } };
+  const initialize = async () => {
+    try {
+      await api.session();
+      setAuthenticated(true);
+      await fetchPeriod(cutoffStart, cutoffEnd);
+    } catch {
+      setAuthenticated(false);
+      setError("");
+    } finally {
+      setBlockingLoading(false);
+    }
+  };
+  useEffect(() => { void initialize(); }, []);
+  const refreshPeriod = async (startDate = cutoffStart, endDate = cutoffEnd) => {
+    setRefreshing(true);
+    await fetchPeriod(startDate, endDate);
+    setRefreshing(false);
+  };
+  const retryLoad = async () => {
+    setBlockingLoading(true);
+    await fetchPeriod(cutoffStart, cutoffEnd);
+    setBlockingLoading(false);
+  };
+  const login = async (username: string, password: string) => {
+    setBlockingLoading(true);
+    setError("");
+    try {
+      await api.login(username, password);
+      setAuthenticated(true);
+      await fetchPeriod(cutoffStart, cutoffEnd);
+    } catch (reason) {
+      setAuthenticated(false);
+      setError(reason instanceof Error ? reason.message : m.loadError);
+    } finally {
+      setBlockingLoading(false);
+    }
+  };
 
   const saveDay = async (value: DailyRecordInput) => {
     if (!period) return;
@@ -97,5 +135,5 @@ export const useDtrApp = () => {
     }
   };
 
-  return { period, profile, setProfile, selectedDate, setSelectedDate, cutoffStart, setCutoffStart, cutoffEnd, setCutoffEnd, leave, setLeave, notice, error, loading, authenticated, dates, records, currentRecord, totals, load, login, saveDay, clearDay, saveProfile, saveLeave, clearLeave };
+  return { period, profile, setProfile, selectedDate, setSelectedDate, cutoffStart, setCutoffStart, cutoffEnd, setCutoffEnd, leave, setLeave, notice, error, blockingLoading, refreshing, authenticated, dates, records, currentRecord, totals, refreshPeriod, retryLoad, login, saveDay, clearDay, saveProfile, saveLeave, clearLeave };
 };

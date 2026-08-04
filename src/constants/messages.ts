@@ -1,6 +1,11 @@
 export const messages = Object.freeze({
   appName: "DTR Automation",
   appSubtitle: "Your semi-monthly attendance and accomplishments workspace",
+  loadingTitle: "Preparing your workspace...",
+  loadingHint: "The service may take a moment to wake up. Your attendance data will appear shortly.",
+  loadingCutoff: "Loading cutoff...",
+  loadErrorTitle: "We couldn't load your workspace",
+  retry: "Try again",
   dashboard: "Dashboard",
   dailyEntry: "Daily entry",
   periodReview: "Period review",
