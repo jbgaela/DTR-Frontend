@@ -3,22 +3,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CurrentResponse, DailyRecord, DailyRecordInput, LeaveRequest, Period, Profile } from "../api";
 import { ApiError, api } from "../api";
 import { messages as m } from "../constants/messages";
-import { currentMonthRange } from "../domain/date";
 import { blankRecord, dateRange } from "../domain/records";
 import { queryKeys } from "../query";
 
 const emptyProfile: Profile = { employeeName: "", employeeId: "", position: "", projectAssignment: "", validatorName: "", supervisorName: "", shiftStartMinute: 420, shiftEndMinute: 960, standardBreakMinutes: 60, regularLimitMinutes: 480, nightStartMinute: 1320, nightEndMinute: 360, workdayMask: 62, timezone: "Asia/Manila" };
-const defaultCutoff = currentMonthRange();
 type Range = { startDate: string; endDate: string };
-const defaultRange: Range = { startDate: defaultCutoff.start, endDate: defaultCutoff.end };
 
 const messageFor = (reason: unknown, fallback: string) => reason instanceof Error ? reason.message : fallback;
 
 export const useDtrApp = () => {
   const queryClient = useQueryClient();
-  const [viewRange, setViewRange] = useState<Range>(defaultRange);
-  const [cutoffStart, setCutoffStart] = useState(defaultCutoff.start);
-  const [cutoffEnd, setCutoffEnd] = useState(defaultCutoff.end);
+  const [viewRange, setViewRange] = useState<Range | null>(null);
+  const [cutoffStart, setCutoffStart] = useState("");
+  const [cutoffEnd, setCutoffEnd] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [notice, setNotice] = useState("");
   const [operationError, setOperationError] = useState("");
@@ -28,10 +25,10 @@ export const useDtrApp = () => {
   const [loggingIn, setLoggingIn] = useState(false);
 
   const sessionQuery = useQuery({ queryKey: queryKeys.session, queryFn: api.session });
-  const currentKey = queryKeys.currentPeriod(viewRange.startDate, viewRange.endDate);
-  const currentQueryOptions = (range: Range = viewRange) => ({
-    queryKey: queryKeys.currentPeriod(range.startDate, range.endDate),
-    queryFn: () => api.current(range.startDate, range.endDate),
+  const currentKey = queryKeys.currentPeriod(viewRange?.startDate, viewRange?.endDate);
+  const currentQueryOptions = (range: Range | null = viewRange) => ({
+    queryKey: queryKeys.currentPeriod(range?.startDate, range?.endDate),
+    queryFn: () => api.current(range?.startDate, range?.endDate),
     enabled: Boolean(sessionQuery.data)
   });
   const currentQuery = useQuery(currentQueryOptions());
@@ -54,7 +51,7 @@ export const useDtrApp = () => {
 
   const showNotice = (value: string) => { setNotice(value); window.setTimeout(() => setNotice(""), 2500); };
   const updateCurrent = (updater: (current: CurrentResponse) => CurrentResponse) => queryClient.setQueryData<CurrentResponse>(currentKey, (current) => current ? updater(current) : current);
-  const invalidateCurrent = () => queryClient.invalidateQueries({ queryKey: currentKey, exact: true });
+  const invalidateCurrent = () => queryClient.invalidateQueries({ queryKey: queryKeys.currentPeriods });
 
   const saveDayMutation = useMutation({
     mutationFn: ({ periodId, date, value }: { periodId: string; date: string; value: DailyRecordInput }) => api.saveDay(periodId, date, value),

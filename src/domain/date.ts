@@ -10,14 +10,6 @@ export const formatDateInput = (date: Date) => `${String(date.getUTCMonth() + 1)
 
 export const todayInput = () => formatDateInput(new Date());
 
-export const currentMonthRange = () => {
-  const today = new Date();
-  return {
-    start: formatDateInput(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1))),
-    end: formatDateInput(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)))
-  };
-};
-
 export const isWeekend = (date: string) => {
   const parsed = parseDateInput(date);
   if (!parsed) return false;

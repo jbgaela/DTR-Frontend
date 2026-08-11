@@ -3,7 +3,8 @@ import { ApiError } from "./api";
 
 export const queryKeys = {
   session: ["session"] as const,
-  currentPeriod: (startDate: string, endDate: string) => ["current-period", startDate, endDate] as const
+  currentPeriods: ["current-period"] as const,
+  currentPeriod: (startDate?: string, endDate?: string) => ["current-period", startDate || "default", endDate || "default"] as const
 };
 
 const retryTransientRequest = (failureCount: number, error: unknown) => {
