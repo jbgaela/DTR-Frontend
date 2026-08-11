@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CurrentResponse, DailyRecord, DailyRecordInput, LeaveRequest, Period, Profile } from "../api";
 import { ApiError, api } from "../api";
 import { messages as m } from "../constants/messages";
+import { currentSemiMonthlyRange } from "../domain/date";
 import { blankRecord, dateRange } from "../domain/records";
 import { queryKeys } from "../query";
 
@@ -13,7 +14,7 @@ const messageFor = (reason: unknown, fallback: string) => reason instanceof Erro
 
 export const useDtrApp = () => {
   const queryClient = useQueryClient();
-  const [viewRange, setViewRange] = useState<Range | null>(null);
+  const [viewRange, setViewRange] = useState<Range>(() => currentSemiMonthlyRange());
   const [cutoffStart, setCutoffStart] = useState("");
   const [cutoffEnd, setCutoffEnd] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -26,7 +27,7 @@ export const useDtrApp = () => {
 
   const sessionQuery = useQuery({ queryKey: queryKeys.session, queryFn: api.session });
   const currentKey = queryKeys.currentPeriod(viewRange?.startDate, viewRange?.endDate);
-  const currentQueryOptions = (range: Range | null = viewRange) => ({
+  const currentQueryOptions = (range: Range = viewRange) => ({
     queryKey: queryKeys.currentPeriod(range?.startDate, range?.endDate),
     queryFn: () => api.current(range?.startDate, range?.endDate),
     enabled: Boolean(sessionQuery.data)
@@ -141,7 +142,9 @@ export const useDtrApp = () => {
     setOperationError("");
     try {
       await loginMutation.mutateAsync({ username, password });
-      await queryClient.fetchQuery({ ...currentQueryOptions(), staleTime: 0 });
+      const defaultRange = currentSemiMonthlyRange();
+      setViewRange(defaultRange);
+      await queryClient.fetchQuery({ ...currentQueryOptions(defaultRange), staleTime: 0 });
     } catch (reason) {
       setOperationError(messageFor(reason, m.loadError));
     } finally {

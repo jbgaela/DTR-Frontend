@@ -10,6 +10,18 @@ export const formatDateInput = (date: Date) => `${String(date.getUTCMonth() + 1)
 
 export const todayInput = () => formatDateInput(new Date());
 
+export const currentSemiMonthlyRange = () => {
+  const today = new Date();
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+  const startDay = today.getUTCDate() <= 15 ? 1 : 16;
+  const endDay = today.getUTCDate() <= 15 ? 15 : new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return {
+    startDate: formatDateInput(new Date(Date.UTC(year, month, startDay))),
+    endDate: formatDateInput(new Date(Date.UTC(year, month, endDay)))
+  };
+};
+
 export const isWeekend = (date: string) => {
   const parsed = parseDateInput(date);
   if (!parsed) return false;
