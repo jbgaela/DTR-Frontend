@@ -27,7 +27,7 @@ export const blankRecord = (date: string, profile: Profile): Omit<DailyRecord, "
   restDayMinutes: 0,
   restDayOtMinutes: 0,
   holidayMinutes: 0,
-  activity: "",
+  activity: "API Development",
   accomplishmentType: "",
   accomplishmentStatus: "",
   hoursSpentMinutes: 0,

@@ -56,6 +56,8 @@ export type DailyRecord = {
   tasks: TaskItem[];
 };
 export type DailyRecordInput = Omit<DailyRecord, "id" | "workDate" | "regularMinutes" | "nightDiffMinutes" | "regularOtMinutes" | "nightDiffOtMinutes" | "restDayMinutes" | "restDayOtMinutes" | "holidayMinutes" | "tasks"> & { tasks: string[]; override?: Record<string, number> };
+export type DailyHours = Pick<DailyRecord, "regularMinutes" | "nightDiffMinutes" | "regularOtMinutes" | "nightDiffOtMinutes" | "restDayMinutes" | "restDayOtMinutes" | "holidayMinutes">;
+export type DailyHoursPreviewInput = Pick<DailyRecordInput, "dayType" | "clockInMinute" | "clockOutMinute" | "endsNextDay" | "breakMinutes" | "calculationMode" | "override">;
 
 export type LeaveRequest = {
   dateFiled: string;
@@ -90,6 +92,7 @@ export const api = {
   },
   profile: () => request<Profile>("/api/profile"),
   saveProfile: (profile: Profile) => request<Profile>("/api/profile", { method: "PUT", body: JSON.stringify(profile) }),
+  previewDailyHours: (body: DailyHoursPreviewInput, signal?: AbortSignal) => request<DailyHours>("/api/daily-hours/preview", { method: "POST", body: JSON.stringify(body), signal }),
   saveDay: (periodId: string, date: string, body: unknown) => request<DailyRecord>(`/api/periods/${periodId}/days?date=${encodeURIComponent(date)}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteDay: (periodId: string, date: string) => request<void>(`/api/periods/${periodId}/days?date=${encodeURIComponent(date)}`, { method: "DELETE" }),
   saveLeave: (periodId: string, leave: LeaveRequest) => request<LeaveRequest>(`/api/periods/${periodId}/leave`, { method: "PUT", body: JSON.stringify(leave) }),

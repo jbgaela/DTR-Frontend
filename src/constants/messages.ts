@@ -51,6 +51,8 @@ export const messages = Object.freeze({
   hoursSpent: "Hours spent",
   remarks: "Remarks",
   review: "Review and correct calculated totals before exporting.",
+  calculatingHours: "Calculating hours...",
+  hoursPreviewError: "Calculated hours are temporarily unavailable. You can still save the entry.",
   profile: "Employee profile",
   payrollRules: "Payroll rules",
   employeeName: "Employee name",

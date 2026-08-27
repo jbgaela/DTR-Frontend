@@ -4,7 +4,8 @@ import { ApiError } from "./api";
 export const queryKeys = {
   session: ["session"] as const,
   currentPeriods: ["current-period"] as const,
-  currentPeriod: (startDate?: string, endDate?: string) => ["current-period", startDate || "default", endDate || "default"] as const
+  currentPeriod: (startDate?: string, endDate?: string) => ["current-period", startDate || "default", endDate || "default"] as const,
+  dailyHoursPreview: (input: unknown) => ["daily-hours-preview", input] as const
 };
 
 const retryTransientRequest = (failureCount: number, error: unknown) => {

@@ -151,8 +151,24 @@ export const useDtrApp = () => {
       setLoggingIn(false);
     }
   };
-  const saveDay = async (value: DailyRecordInput) => { if (period) { try { await saveDayMutation.mutateAsync({ periodId: period.id, date: selectedDate, value }); } catch { /* surfaced through operationError */ } } };
-  const clearDay = async () => { if (period && records.some((record) => record.workDate === selectedDate)) { try { await clearDayMutation.mutateAsync({ periodId: period.id, date: selectedDate }); } catch { /* surfaced through operationError */ } } };
+  const saveDay = async (value: DailyRecordInput) => {
+    if (!period) return null;
+    try {
+      return await saveDayMutation.mutateAsync({ periodId: period.id, date: selectedDate, value });
+    } catch {
+      return null;
+    }
+  };
+  const clearDay = async () => {
+    if (!period) return false;
+    if (!records.some((record) => record.workDate === selectedDate)) return true;
+    try {
+      await clearDayMutation.mutateAsync({ periodId: period.id, date: selectedDate });
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const saveProfile = async (value: Profile) => { try { return await saveProfileMutation.mutateAsync(value); } catch { return null; } };
   const saveLeave = async (value: LeaveRequest) => { if (!period) return null; try { return await saveLeaveMutation.mutateAsync({ periodId: period.id, value }); } catch { return null; } };
   const clearLeave = async () => { if (!period) return false; try { await clearLeaveMutation.mutateAsync(period.id); return true; } catch { return false; } };
