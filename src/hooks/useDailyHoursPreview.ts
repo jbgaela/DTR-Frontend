@@ -9,11 +9,13 @@ const emptyHours: DailyHours = { regularMinutes: 0, nightDiffMinutes: 0, regular
 const canPreview = (input: DailyHoursPreviewInput) => input.calculationMode === "OVERRIDE"
   || (input.clockInMinute !== null && input.clockOutMinute !== null && input.dayType !== "LEAVE" && input.dayType !== "ABSENT");
 
+export type PreviewState = "idle" | "calculating" | "ready" | "error";
+
 export const useDailyHoursPreview = (input: DailyHoursPreviewInput) => {
   const signature = JSON.stringify(input);
   const [debouncedInput, setDebouncedInput] = useState(input);
   const debouncedSignature = JSON.stringify(debouncedInput);
-  const previewEnabled = canPreview(input);
+  const enabled = canPreview(input);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedInput(input), 200);
@@ -23,13 +25,18 @@ export const useDailyHoursPreview = (input: DailyHoursPreviewInput) => {
   const query = useQuery({
     queryKey: queryKeys.dailyHoursPreview(debouncedInput),
     queryFn: ({ signal }) => api.previewDailyHours(debouncedInput, signal),
-    enabled: previewEnabled && debouncedSignature === signature
+    enabled: enabled && debouncedSignature === signature
   });
-  const calculating = previewEnabled && (debouncedSignature !== signature || query.isPending || query.isFetching);
+
+  const calculating = enabled && (debouncedSignature !== signature || query.isPending || query.isFetching);
+  const unavailable = enabled && !calculating && Boolean(query.error);
+  const state: PreviewState = !enabled ? "idle" : calculating ? "calculating" : unavailable ? "error" : query.data ? "ready" : "idle";
 
   return {
-    hours: previewEnabled ? (calculating ? null : query.data || null) : emptyHours,
+    hours: enabled ? (calculating || unavailable ? null : query.data || null) : emptyHours,
     calculating,
-    error: previewEnabled && !calculating ? query.error : null
+    enabled,
+    state,
+    error: enabled && !calculating ? query.error : null
   };
 };

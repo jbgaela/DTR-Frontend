@@ -1,14 +1,28 @@
-import type { DailyRecord, DayType, Profile } from "../api";
-import { formatDateInput, isWeekend, parseDateInput } from "./date";
+import type { DailyHours, DailyRecord, DayType, Profile } from "../api";
+import { eachDateInRange, isWeekend } from "./date";
 
-export const dateRange = (start: string, end: string) => {
-  const result: string[] = [];
-  const startDate = parseDateInput(start);
-  const endDate = parseDateInput(end);
-  if (!startDate || !endDate || startDate > endDate) return result;
-  for (let value = new Date(startDate.getTime()); value <= endDate; value.setUTCDate(value.getUTCDate() + 1)) result.push(formatDateInput(value));
-  return result;
+export type DailyRecordValue = Omit<DailyRecord, "id"> | DailyRecord;
+export type HourTotals = {
+  regularMinutes: number;
+  overtimeMinutes: number;
+  nightDiffMinutes: number;
+  nightOtMinutes: number;
+  restDayMinutes: number;
+  restDayOtMinutes: number;
+  holidayMinutes: number;
 };
+
+export const emptyTotals = (): HourTotals => ({
+  regularMinutes: 0,
+  overtimeMinutes: 0,
+  nightDiffMinutes: 0,
+  nightOtMinutes: 0,
+  restDayMinutes: 0,
+  restDayOtMinutes: 0,
+  holidayMinutes: 0
+});
+
+export const dateRange = (start: string, end: string) => eachDateInRange(start, end);
 
 export const defaultDayType = (date: string): DayType => isWeekend(date) ? "REST_DAY" : "WORKDAY";
 
@@ -34,3 +48,25 @@ export const blankRecord = (date: string, profile: Profile): Omit<DailyRecord, "
   remarks: "",
   tasks: []
 });
+
+export const toHours = (record: DailyRecordValue): DailyHours => ({
+  regularMinutes: record.regularMinutes,
+  nightDiffMinutes: record.nightDiffMinutes,
+  regularOtMinutes: record.regularOtMinutes,
+  nightDiffOtMinutes: record.nightDiffOtMinutes,
+  restDayMinutes: record.restDayMinutes,
+  restDayOtMinutes: record.restDayOtMinutes,
+  holidayMinutes: record.holidayMinutes
+});
+
+export const sumRecords = (records: DailyRecord[]): HourTotals => records.reduce((total, record) => ({
+  regularMinutes: total.regularMinutes + record.regularMinutes,
+  overtimeMinutes: total.overtimeMinutes + record.regularOtMinutes,
+  nightDiffMinutes: total.nightDiffMinutes + record.nightDiffMinutes,
+  nightOtMinutes: total.nightOtMinutes + record.nightDiffOtMinutes,
+  restDayMinutes: total.restDayMinutes + record.restDayMinutes,
+  restDayOtMinutes: total.restDayOtMinutes + record.restDayOtMinutes,
+  holidayMinutes: total.holidayMinutes + record.holidayMinutes
+}), emptyTotals());
+
+export const findRecord = (records: DailyRecord[], date: string) => records.find((record) => record.workDate === date) ?? null;

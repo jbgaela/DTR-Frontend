@@ -1,9 +1,153 @@
 ﻿import { useState } from "react";
-import { Button } from "../components/ui";
+import { CalendarCheck2, Eye, EyeOff, FileSpreadsheet, ListChecks, LockKeyhole, ShieldCheck } from "lucide-react";
+import { Button, TextField } from "../components/ui";
 import { messages as m } from "../constants/messages";
 
-export const LoginView = ({ onLogin, error }: { onLogin: (username: string, password: string) => Promise<void>; error: string }) => {
+type LoginViewProps = {
+  onLogin: (username: string, password: string) => Promise<boolean>;
+  loading: boolean;
+  error: string;
+  onClearError?: () => void;
+};
+
+export const LoginView = ({ onLogin, loading, error, onClearError }: LoginViewProps) => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  return <main className="grid min-h-screen grid-cols-[minmax(280px,.9fr)_minmax(420px,1.1fr)] bg-[#f4f7fc] max-[800px]:block"><section className="relative flex flex-col overflow-hidden bg-[radial-gradient(circle_at_80%_12%,#315c9b_0,transparent_32%),linear-gradient(145deg,#102542_0%,#183761_55%,#234c84_100%)] px-[clamp(28px,6vw,84px)] py-[42px] text-[#eaf2ff] max-[800px]:min-h-[310px] max-[800px]:px-6 max-[800px]:py-7"><div className="relative z-10 flex items-center gap-2.5 text-[15px] font-bold"><span className="grid size-[42px] place-items-center rounded-[13px] bg-gradient-to-br from-[#72a9ff] to-[#3d78e4] text-[21px] font-extrabold text-white shadow-[0_9px_20px_rgb(7_26_53/12%)]">D</span><span>{m.appName}</span></div><div className="relative z-10 my-auto max-w-[430px] max-[800px]:mb-0"><p className="mb-0 text-[11px] font-bold uppercase tracking-[.08em] text-[#9fc4ff]">Attendance workspace</p><h1 className="my-[13px] mb-[15px] text-[clamp(34px,4vw,56px)] font-bold leading-[1.04] tracking-[-.055em] text-white max-[800px]:text-[38px]">Make every workday count.</h1><p className="m-0 max-w-[360px] text-[15px] leading-[1.65] text-[#b9cce7]">{m.appSubtitle}</p></div><div className="relative z-10 mt-7 flex items-center gap-2 text-xs text-[#b9cce7]"><span className="size-2 rounded-full bg-emerald-400" /> Secure access to your personal workspace</div></section><section className="grid place-items-center p-9 max-[800px]:px-4 max-[800px]:pb-10 max-[800px]:pt-6"><form className="w-full max-w-[430px] rounded-[22px] border border-slate-200 bg-white p-[clamp(28px,5vw,48px)] shadow-[0_24px_60px_rgb(24_55_97/8%)] max-[800px]:rounded-[18px] max-[800px]:px-[22px] max-[800px]:py-7" onSubmit={(event) => { event.preventDefault(); void onLogin(username, password); }}><div className="mb-[30px]"><p className="mb-0 text-[11px] font-bold uppercase tracking-[.08em] text-[#6684ad]">{m.appName}</p><h2 className="my-[7px] mb-[9px] text-[32px] font-bold tracking-[-.045em] text-ink">Welcome back</h2><p className="m-0 text-[13px] leading-relaxed text-[#71819a]">Sign in to manage your daily entries and keep every accomplishment on track.</p></div><label className="mt-[17px] grid gap-2 text-xs font-bold text-[#43546d]"><span>{m.username}</span><input className="w-full rounded-[10px] border border-[#d9e2ee] bg-[#fbfcfe] px-[13px] py-3 text-ink outline-none transition focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/10" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required /></label><label className="mt-[17px] grid gap-2 text-xs font-bold text-[#43546d]"><span>{m.password}</span><input className="w-full rounded-[10px] border border-[#d9e2ee] bg-[#fbfcfe] px-[13px] py-3 text-ink outline-none transition focus:border-brand focus:bg-white focus:ring-4 focus:ring-brand/10" autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <p className="mb-0 mt-[17px] rounded-lg bg-red-50 px-3.5 py-[11px] text-[13px] text-red-700" role="alert">{error}</p>}<Button className="mt-6 w-full justify-between rounded-[10px] px-3.5 py-3" type="submit">{m.signIn}<span className="text-lg leading-none transition-transform" aria-hidden="true">→</span></Button></form></section></main>;
+  const [showPassword, setShowPassword] = useState(false);
+  const [localError, setLocalError] = useState("");
+
+  const submit = async () => {
+    setLocalError("");
+    if (!username.trim() || !password) {
+      setLocalError("Enter your username and password to continue.");
+      return;
+    }
+    await onLogin(username.trim(), password);
+  };
+
+  return (
+    <main className="grid min-h-dvh bg-canvas lg:grid-cols-[minmax(0,1.05fr)_minmax(0,.95fr)]">
+      <section className="relative hidden overflow-hidden bg-sidebar px-10 py-12 text-white lg:flex lg:flex-col xl:px-16">
+        <div className="pointer-events-none absolute -right-32 -top-32 size-[460px] rounded-full bg-[radial-gradient(circle,rgb(64_128_255/28%)_0,transparent_68%)]" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-40 -left-24 size-[420px] rounded-full bg-[radial-gradient(circle,rgb(31_196_159/16%)_0,transparent_68%)]" aria-hidden="true" />
+        <div className="relative z-10 flex items-center gap-3">
+          <span className="grid size-11 place-items-center rounded-xl bg-gradient-to-br from-[#5c96ff] to-brand text-lg font-semibold text-white shadow-[0_10px_24px_rgb(0_0_0/18%)]">D</span>
+          <span>
+            <strong className="block text-sm font-semibold text-white">{m.appName}</strong>
+            <span className="mt-0.5 block text-[11px] text-sidebar-text">Attendance & accomplishments</span>
+          </span>
+        </div>
+
+        <div className="relative z-10 my-auto max-w-[510px] py-16">
+          <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-[#8bb6ff]">Your workday, clearly recorded</p>
+          <h1 className="mt-4 text-[clamp(2.4rem,4vw,3.6rem)] font-semibold leading-[1.04] tracking-[-.055em] text-white">Track your time.<br />Build your goals.</h1>
+          <p className="mt-5 max-w-[430px] text-[15px] leading-relaxed text-sidebar-text">One calm workspace for daily attendance, accomplishments, leave, and the company workbooks you send every cutoff.</p>
+
+          <ul className="mt-9 grid gap-3.5 text-sm text-[#c7d5e8]">
+            {[
+              { icon: <ClockIcon />, label: "Attendance tracking with server-calculated hours" },
+              { icon: <ListChecks className="size-4" aria-hidden="true" />, label: "Task and accomplishment records in one place" },
+              { icon: <CalendarCheck2 className="size-4" aria-hidden="true" />, label: "Leave requests tied to the active period" },
+              { icon: <FileSpreadsheet className="size-4" aria-hidden="true" />, label: "DTR and accomplishment workbook exports" }
+            ].map((item) => (
+              <li key={item.label} className="flex items-center gap-3">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/5 text-[#9dc3ff]">{item.icon}</span>
+                {item.label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-2 text-xs text-sidebar-text">
+          <ShieldCheck className="size-4 text-[#7ee2c0]" aria-hidden="true" />
+          Secure access to your personal workspace
+        </div>
+      </section>
+
+      <section className="flex flex-col px-4 py-6 sm:px-8 lg:px-12 lg:py-12">
+        <div className="flex items-center gap-2.5 lg:hidden">
+          <span className="grid size-9 place-items-center rounded-lg bg-brand text-base font-semibold text-white">D</span>
+          <span className="text-sm font-semibold text-ink">{m.appName}</span>
+        </div>
+
+        <div className="flex flex-1 items-center justify-center py-8">
+          <div className="w-full max-w-[430px]">
+            <div className="mb-7">
+              <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-brand">Welcome back</p>
+              <h2 className="mt-2 text-[30px] font-semibold leading-tight tracking-[-.045em] text-ink">Sign in to your workspace</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted">Continue recording attendance, reviewing totals, and preparing your cutoff exports.</p>
+            </div>
+
+            <form
+              className="rounded-2xl border border-line bg-surface p-5 surface-shadow sm:p-7"
+              onSubmit={(event) => { event.preventDefault(); void submit(); }}
+              noValidate
+            >
+              <div className="grid gap-4">
+                <TextField
+                  label={m.username}
+                  name="username"
+                  autoComplete="username"
+                  autoFocus
+                  value={username}
+                  onChange={(event) => { setUsername(event.target.value); setLocalError(""); onClearError?.(); }}
+                  disabled={loading}
+                  placeholder="Enter your username"
+                  required
+                />
+                <div className="relative">
+                  <TextField
+                    label={m.password}
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => { setPassword(event.target.value); setLocalError(""); onClearError?.(); }}
+                    disabled={loading}
+                    placeholder="Enter your password"
+                    required
+                    className="[&_input]:pr-11"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-[1.9rem] grid size-8 place-items-center rounded-md text-muted hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+                  </button>
+                </div>
+              </div>
+
+              {(localError || error) && (
+                <p className="mt-4 rounded-lg border border-danger/15 bg-danger-soft px-3.5 py-2.5 text-[13px] font-medium leading-relaxed text-danger" role="alert">
+                  {localError || error}
+                </p>
+              )}
+
+              <Button type="submit" size="lg" className="mt-5 w-full" loading={loading} icon={<LockKeyhole className="size-4" aria-hidden="true" />}>
+                {loading ? "Signing in..." : "Sign in"}
+              </Button>
+
+              <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[11px] text-muted">
+                <ShieldCheck className="size-3.5 text-success" aria-hidden="true" />
+                Your session is protected with a secure cookie.
+              </p>
+            </form>
+
+            <p className="mt-5 text-center text-xs leading-relaxed text-muted">Contact your administrator if you cannot access your account.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
 };
+
+const ClockIcon = () => (
+  <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" strokeLinecap="round" />
+  </svg>
+);

@@ -2,11 +2,15 @@ import { messages } from "./constants/messages";
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string;
+  readonly fields: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code = "REQUEST_ERROR", fields?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
+    this.fields = fields;
   }
 }
 
@@ -71,20 +75,51 @@ export type LeaveRequest = {
 export type Period = { id: string; startDate: string; endDate: string; dailyRecords: DailyRecord[]; leaveRequest: LeaveRequest | null };
 export type CurrentResponse = { period: Period; profile: Profile };
 export type AuthUser = { username: string };
+export type SessionResponse = { user: AuthUser };
+export type ExportKind = "dtr" | "accomplishments";
+export type ExportDownload = { blob: Blob; filename: string };
+
+let unauthorizedHandler: (() => void) | null = null;
+
+export const setUnauthorizedHandler = (handler: (() => void) | null) => {
+  unauthorizedHandler = handler;
+};
+
+const parseError = async (response: Response) => {
+  const body = await response.json().catch(() => null);
+  const error = body?.error;
+  return new ApiError(
+    response.status,
+    error?.message || messages.requestFailed,
+    error?.code || "REQUEST_ERROR",
+    error?.fields
+  );
+};
 
 const request = async <T>(url: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...options });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, body.error?.message || messages.requestFailed);
-  }
+  if (response.status === 401 && !url.startsWith("/api/auth/")) unauthorizedHandler?.();
+  if (!response.ok) throw await parseError(response);
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 };
 
+const filenameFromDisposition = (header: string | null, fallback: string) => {
+  if (!header) return fallback;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.replace(/"/g, ""));
+    } catch {
+      return encoded.replace(/"/g, "");
+    }
+  }
+  return /filename="?([^";]+)"?/i.exec(header)?.[1] ?? fallback;
+};
+
 export const api = {
-  login: (username: string, password: string) => request<{ user: AuthUser }>("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-  session: () => request<{ user: AuthUser }>("/api/auth/session"),
+  login: (username: string, password: string) => request<SessionResponse>("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  session: () => request<SessionResponse>("/api/auth/session"),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   current: (startDate?: string, endDate?: string) => {
     const query = startDate && endDate ? `?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}` : "";
@@ -96,9 +131,18 @@ export const api = {
   saveDay: (periodId: string, date: string, body: unknown) => request<DailyRecord>(`/api/periods/${periodId}/days?date=${encodeURIComponent(date)}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteDay: (periodId: string, date: string) => request<void>(`/api/periods/${periodId}/days?date=${encodeURIComponent(date)}`, { method: "DELETE" }),
   saveLeave: (periodId: string, leave: LeaveRequest) => request<LeaveRequest>(`/api/periods/${periodId}/leave`, { method: "PUT", body: JSON.stringify(leave) }),
-  deleteLeave: (periodId: string) => request<void>(`/api/periods/${periodId}/leave`, { method: "DELETE" })
+  deleteLeave: (periodId: string) => request<void>(`/api/periods/${periodId}/leave`, { method: "DELETE" }),
+  exportWorkbook: async (periodId: string, kind: ExportKind): Promise<ExportDownload> => {
+    const response = await fetch(`/api/periods/${periodId}/export/${kind}`, { credentials: "include" });
+    if (response.status === 401) unauthorizedHandler?.();
+    if (!response.ok) throw await parseError(response);
+    const fallback = `${kind === "dtr" ? "DTR" : "Task_Accomplishments"}.xlsx`;
+    return {
+      blob: await response.blob(),
+      filename: filenameFromDisposition(response.headers.get("Content-Disposition"), fallback)
+    };
+  }
 };
 
 export const minuteToTime = (minute: number | null) => minute === null ? "" : `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 export const timeToMinute = (value: string) => value ? Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5)) : null;
-export const hours = (minutes: number) => (minutes / 60).toFixed(2);

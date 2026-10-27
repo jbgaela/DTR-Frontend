@@ -1,46 +1,311 @@
-import { useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, Route, Routes, useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { Globe2, Menu } from "lucide-react";
+import { ConfirmDialog } from "./components/ConfirmDialog";
+import { ErrorState } from "./components/ErrorState";
 import { LoadingState } from "./components/LoadingState";
-import { Button } from "./components/ui";
+import { MobileNavigation } from "./components/MobileNavigation";
+import { PeriodSelector } from "./components/PeriodSelector";
+import { Sidebar } from "./components/Sidebar";
+import { Toast } from "./components/Toast";
+import { UserMenu } from "./components/UserMenu";
+import { InlineAlert, IconButton, PageSkeleton } from "./components/ui";
+import { UnsavedProvider, type ConfirmationOptions } from "./components/unsaved";
 import { messages as m } from "./constants/messages";
+import { formatRangeLabel } from "./domain/date";
 import { useDtrApp } from "./hooks/useDtrApp";
-import { DailyEntryView } from "./views/DailyEntryView";
 import { DashboardView } from "./views/DashboardView";
-import { ExportsView } from "./views/ExportsView";
-import { LeaveView } from "./views/LeaveView";
-import { ReviewView } from "./views/ReviewView";
-import { SettingsView } from "./views/SettingsView";
 import { LoginView } from "./views/LoginView";
 
-type View = "dashboard" | "daily" | "review" | "leave" | "settings" | "exports";
+const DailyEntryView = lazy(async () => ({ default: (await import("./views/DailyEntryView")).DailyEntryView }));
+const LeaveView = lazy(async () => ({ default: (await import("./views/LeaveView")).LeaveView }));
+const ReviewView = lazy(async () => ({ default: (await import("./views/ReviewView")).ReviewView }));
+const SettingsView = lazy(async () => ({ default: (await import("./views/SettingsView")).SettingsView }));
+const ExportsView = lazy(async () => ({ default: (await import("./views/ExportsView")).ExportsView }));
 
-const navigation: Array<{ view: View; label: string }> = [
-  { view: "dashboard", label: m.dashboard },
-  { view: "daily", label: m.dailyEntry },
-  { view: "review", label: m.periodReview },
-  { view: "leave", label: m.leave },
-  { view: "settings", label: m.settings },
-  { view: "exports", label: m.exports }
-];
+const appPaths = new Set(["/dashboard", "/daily", "/review", "/leave", "/settings", "/exports"]);
+const titles: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/daily": "Daily entry",
+  "/review": "Period review",
+  "/leave": "Leave form",
+  "/settings": "Settings",
+  "/exports": "Exports"
+};
 
 export const App = () => {
-  const [view, setView] = useState<View>("dashboard");
   const state = useDtrApp();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [dirty, setDirty] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState<ConfirmationOptions | null>(null);
+  const confirmationResolver = useRef<((value: boolean) => void) | null>(null);
+  const allowNavigation = useRef(false);
+
+  const requestConfirmation = useCallback((options: ConfirmationOptions) => new Promise<boolean>((resolve) => {
+    confirmationResolver.current?.(false);
+    confirmationResolver.current = resolve;
+    setConfirmation(options);
+  }), []);
+
+  const settleConfirmation = useCallback((value: boolean) => {
+    confirmationResolver.current?.(value);
+    confirmationResolver.current = null;
+    setConfirmation(null);
+  }, []);
+
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (!dirty || allowNavigation.current) return false;
+    return currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search;
+  });
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
+
+  useEffect(() => {
+    if (!state.authenticated) {
+      setDirty(false);
+      return;
+    }
+    if (!state.period) return;
+    if (location.pathname === "/login" || !appPaths.has(location.pathname)) {
+      navigate({ pathname: "/dashboard", search: state.periodSearch }, { replace: true });
+    }
+  }, [state.authenticated, state.period, state.periodSearch, location.pathname, navigate]);
+
+  useEffect(() => {
+    const label = titles[location.pathname] ?? (state.authenticated ? "Workspace" : "Sign in");
+    document.title = `${label} · ${m.appName}`;
+  }, [location.pathname, state.authenticated]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname, location.search]);
+
+  const handleApplyPeriod = useCallback(async (startDate: string, endDate: string) => {
+    if (startDate === state.period?.startDate && endDate === state.period?.endDate) return true;
+    if (dirty) {
+      const confirmed = await requestConfirmation({
+        title: "Load a different reporting period?",
+        description: "You have unsaved changes on this screen. Loading another period will discard them.",
+        confirmLabel: "Discard and load",
+        tone: "danger"
+      });
+      if (!confirmed) return false;
+    }
+    const prepared = await state.prepareRange(startDate, endDate);
+    if (!prepared) return false;
+    if (dirty) {
+      allowNavigation.current = true;
+      setDirty(false);
+      window.setTimeout(() => { allowNavigation.current = false; }, 0);
+    }
+    state.applyRange(startDate, endDate);
+    return true;
+  }, [dirty, requestConfirmation, state.prepareRange, state.applyRange, state.period?.startDate, state.period?.endDate]);
+
+  const handleSignOut = useCallback(async () => {
+    if (dirty) {
+      const confirmed = await requestConfirmation({
+        title: "Sign out with unsaved changes?",
+        description: "Your unsaved edits will be discarded when you sign out.",
+        confirmLabel: "Discard and sign out",
+        tone: "danger"
+      });
+      if (!confirmed) return;
+    }
+    allowNavigation.current = true;
+    const success = await state.logout();
+    if (success) {
+      setDirty(false);
+      window.setTimeout(() => { allowNavigation.current = false; }, 0);
+    } else {
+      allowNavigation.current = false;
+    }
+  }, [dirty, requestConfirmation, state.logout]);
+
+  const unsavedValue = useMemo(() => ({ dirty, setDirty, requestConfirmation }), [dirty, requestConfirmation]);
+
+  const settingsHref = `/settings${state.periodSearch}`;
+  const signOut = () => { void handleSignOut(); };
 
   if (state.blockingLoading) return <LoadingState />;
-  if (state.fatalError) return <main className="grid min-h-screen min-h-[100dvh] place-items-center bg-app p-6"><section className="w-full max-w-[460px] rounded-[20px] border border-slate-200 bg-white p-10 text-center shadow-[0_20px_50px_rgb(32_53_93/5%)]"><div className="mx-auto mb-[18px] grid size-[38px] place-items-center rounded-xl bg-brand text-xl font-extrabold text-white" aria-hidden="true">D</div><p className="mb-0 text-[11px] font-bold uppercase tracking-[.08em] text-[#6684ad]">{m.appName}</p><h1 className="my-2 mb-[18px] text-2xl font-bold tracking-[-.04em] text-ink">{m.loadErrorTitle}</h1><p className="mb-[17px] rounded-lg bg-red-50 px-3.5 py-[11px] text-left text-[13px] text-red-700" role="alert">{state.fatalError}</p><Button onClick={() => void state.retryLoad()}>{m.retry}</Button></section></main>;
-  if (!state.authenticated) return <LoginView onLogin={state.login} error={state.error} />;
-  if (!state.period) return null;
+  if (state.fatalError) return <ErrorState message={state.fatalError} retrying={state.retrying} onRetry={() => void state.retryLoad()} />;
 
-  const openDate = (date: string) => { state.setSelectedDate(date); setView("daily"); };
-  return <div className="flex min-h-screen bg-app max-[800px]:block">
-    <aside className="flex w-[250px] shrink-0 flex-col gap-9 bg-sidebar p-6 px-4 text-[#dbe7fa] max-[800px]:block max-[800px]:w-full max-[800px]:gap-4 max-[800px]:p-3.5"><div className="flex items-center gap-2.5"><div className="grid size-[38px] place-items-center rounded-xl bg-brand text-xl font-extrabold text-white">D</div><div><strong className="block text-sm text-white">{m.appName}</strong><span className="mt-0.5 block text-[11px] leading-tight text-[#9fb1cd]">{m.appSubtitle}</span></div></div><nav className="grid gap-1.5 max-[800px]:flex max-[800px]:overflow-x-auto">{navigation.map((item) => <button key={item.view} className={`rounded-lg border-0 bg-transparent px-[13px] py-2.5 text-left text-sm text-[#aebdd4] hover:bg-[#223a60] hover:text-white max-[800px]:whitespace-nowrap ${view === item.view ? "bg-[#223a60] text-white" : ""}`} onClick={() => setView(item.view)}>{item.label}</button>)}</nav><div className="mt-auto break-words border-t border-[#294265] px-1.5 pt-4 text-xs text-[#9fb1cd] max-[800px]:hidden">{state.profile.employeeName || m.missingName}</div></aside>
-    <main className="mx-auto w-full max-w-[1180px] px-9 pb-16 pt-7 max-[800px]:px-[15px] max-[800px]:pb-[45px] max-[800px]:pt-[22px]"><header className="mb-[30px] flex items-center justify-between max-[800px]:flex-wrap max-[800px]:items-start max-[800px]:gap-2.5"><div><p className="mb-0 text-[11px] font-bold uppercase tracking-[.08em] text-[#6684ad]">{m.currentPeriod}</p><h1 className="mt-1 text-[27px] font-bold tracking-[-.03em] text-ink max-[800px]:text-xl">{state.period.startDate}{m.periodRangeSeparator}{state.period.endDate}</h1></div><form className="flex items-end gap-2 max-[800px]:w-full max-[800px]:flex-wrap" onSubmit={(event) => { event.preventDefault(); void state.refreshPeriod(state.cutoffStart, state.cutoffEnd); }}><label className="grid gap-1 text-[10px] font-bold text-[#687891]"><span>{m.cutoffStart}</span><input className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:cursor-wait disabled:bg-slate-50 disabled:text-slate-400 max-[800px]:w-[140px]" disabled={state.refreshing} value={state.cutoffStart} placeholder={m.dateFormat} aria-label={m.cutoffStart} onChange={(event) => state.setCutoffStart(event.target.value)} /></label><label className="grid gap-1 text-[10px] font-bold text-[#687891]"><span>{m.cutoffEnd}</span><input className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-ink outline-none focus:border-brand focus:ring-4 focus:ring-brand/10 disabled:cursor-wait disabled:bg-slate-50 disabled:text-slate-400 max-[800px]:w-[140px]" disabled={state.refreshing} value={state.cutoffEnd} placeholder={m.dateFormat} aria-label={m.cutoffEnd} onChange={(event) => state.setCutoffEnd(event.target.value)} /></label><Button className="px-3 py-2 text-xs" disabled={state.refreshing} type="submit">{state.refreshing ? m.loadingCutoff : m.applyCutoff}</Button></form><div className="flex items-center gap-1.5 text-[13px] text-[#687891] max-[800px]:text-[11px]"><span className="size-2 rounded-full bg-emerald-500" /> {state.profile.timezone}</div></header>{state.notice && <div className="mb-[17px] rounded-lg bg-emerald-50 px-3.5 py-[11px] text-[13px] text-emerald-700">{state.notice}</div>}{state.error && <div className="mb-[17px] rounded-lg bg-red-50 px-3.5 py-[11px] text-[13px] text-red-700" role="alert">{state.error}</div>}
-      {view === "dashboard" && <DashboardView period={state.period} totals={state.totals} dates={state.dates} onSelect={openDate} />}
-      {view === "daily" && state.currentRecord && <DailyEntryView record={state.currentRecord} dates={state.dates} selectedDate={state.selectedDate} onDate={state.setSelectedDate} onSave={state.saveDay} onClear={state.clearDay} saving={state.savingDay} clearing={state.clearingDay} />}
-      {view === "review" && <ReviewView period={state.period} onSelect={openDate} />}
-      {view === "leave" && <LeaveView leave={state.leave} onSave={state.saveLeave} onClear={state.clearLeave} saving={state.savingLeave} clearing={state.clearingLeave} />}
-      {view === "settings" && <SettingsView profile={state.profile} onSave={state.saveProfile} saving={state.savingProfile} />}
-      {view === "exports" && <ExportsView periodId={state.period.id} />}
-    </main>
-  </div>;
+  if (!state.authenticated) {
+    return (
+      <>
+        <LoginView onLogin={state.login} loading={state.loggingIn} error={state.operationError} onClearError={state.dismissError} />
+        <Toast notice={state.notice} onDismiss={state.dismissNotice} />
+      </>
+    );
+  }
+
+  if (!state.period) {
+    return <ErrorState message={state.error || m.loadError} retrying={state.retrying} onRetry={() => void state.retryLoad()} />;
+  }
+
+  return (
+    <UnsavedProvider value={unsavedValue}>
+      <div className="min-h-dvh bg-canvas">
+        <a href="#main-content" className="skip-link">Skip to main content</a>
+        <p className="sr-only" role="status" aria-live="polite">{titles[location.pathname] ?? "Workspace"}</p>
+        <Sidebar
+          profile={state.profile}
+          attentionCount={state.attentionCount}
+          periodSearch={state.periodSearch}
+          dailySearch={state.dailySearch}
+          settingsHref={settingsHref}
+          signingOut={state.loggingOut}
+          onSignOut={signOut}
+        />
+
+        <div className="lg:pl-[264px]">
+          <header className="sticky top-0 z-30 h-16 border-b border-line bg-surface/85 backdrop-blur">
+            <div className="mx-auto flex h-full max-w-[1440px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+              <IconButton label="Open navigation" className="shrink-0 lg:hidden" onClick={() => setDrawerOpen(true)} icon={<Menu className="size-5" aria-hidden="true" />} />
+              <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                <PeriodSelector
+                  period={state.period}
+                  today={state.today}
+                  preparing={state.refreshing}
+                  error={state.refreshError}
+                  onApply={handleApplyPeriod}
+                />
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="hidden items-center gap-1.5 rounded-lg border border-line bg-canvas px-2.5 py-1.5 text-[11px] font-medium text-muted md:flex">
+                    <Globe2 className="size-3.5" aria-hidden="true" />
+                    {state.profile.timezone}
+                  </span>
+                  <div className="lg:hidden">
+                    <UserMenu name={state.profile.employeeName} position={state.profile.position} settingsHref={settingsHref} variant="compact" signingOut={state.loggingOut} onSignOut={signOut} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main id="main-content" className="mx-auto w-full max-w-[1440px] px-4 pb-28 pt-5 sm:px-6 lg:px-8 lg:pb-12 lg:pt-7">
+            {state.error && (
+              <InlineAlert tone="danger" className="mb-5" onDismiss={() => { state.dismissError(); state.refreshErrorDismiss(); }}>
+                {state.error}
+              </InlineAlert>
+            )}
+
+            <Suspense fallback={<PageSkeleton />}>
+              <Routes>
+              <Route path="/dashboard" element={
+                <DashboardView
+                  profile={state.profile}
+                  period={state.period}
+                  entries={state.entries}
+                  completion={state.completion}
+                  missingSummary={state.missingSummary}
+                  totals={state.totals}
+                  today={state.today}
+                  onSelect={state.openDate}
+                  onGoTo={state.goTo}
+                />
+              } />
+              <Route path="/daily" element={state.currentRecord ? (
+                <DailyEntryView
+                  record={state.currentRecord}
+                  profile={state.profile}
+                  period={state.period}
+                  dates={state.dates}
+                  selectedDate={state.selectedDate}
+                  today={state.today}
+                  onDate={state.setSelectedDate}
+                  onSave={state.saveDay}
+                  onClear={state.clearDay}
+                  saving={state.savingDay}
+                  clearing={state.clearingDay}
+                />
+              ) : <ErrorState message={m.loadError} onRetry={() => void state.retryLoad()} />} />
+              <Route path="/review" element={
+                <ReviewView
+                  period={state.period}
+                  entries={state.entries}
+                  completion={state.completion}
+                  missingSummary={state.missingSummary}
+                  nextMissing={state.nextMissing}
+                  onSelect={state.openDate}
+                  onGoTo={state.goTo}
+                />
+              } />
+              <Route path="/leave" element={
+                <LeaveView
+                  leave={state.leave}
+                  period={state.period}
+                  today={state.today}
+                  onSave={state.saveLeave}
+                  onClear={state.clearLeave}
+                  saving={state.savingLeave}
+                  clearing={state.clearingLeave}
+                />
+              } />
+              <Route path="/settings" element={<SettingsView profile={state.profile} onSave={state.saveProfile} saving={state.savingProfile} />} />
+              <Route path="/exports" element={
+                <ExportsView
+                  period={state.period}
+                  profile={state.profile}
+                  records={state.records}
+                  missingSummary={state.missingSummary}
+                  nextMissing={state.nextMissing}
+                  onSelect={state.openDate}
+                  onGoTo={state.goTo}
+                  notify={state.notify}
+                />
+              } />
+              <Route path="/login" element={<Navigate to={`/dashboard${state.periodSearch}`} replace />} />
+              <Route path="*" element={<Navigate to={`/dashboard${state.periodSearch}`} replace />} />
+              </Routes>
+            </Suspense>
+          </main>
+        </div>
+
+        <MobileNavigation
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          profile={state.profile}
+          attentionCount={state.attentionCount}
+          periodSearch={state.periodSearch}
+          dailySearch={state.dailySearch}
+          signingOut={state.loggingOut}
+          onSignOut={signOut}
+        />
+
+        <Toast notice={state.notice} onDismiss={state.dismissNotice} />
+
+        <ConfirmDialog
+          open={Boolean(confirmation)}
+          title={confirmation?.title ?? ""}
+          description={confirmation?.description ?? ""}
+          confirmLabel={confirmation?.confirmLabel}
+          cancelLabel={confirmation?.cancelLabel}
+          tone={confirmation?.tone}
+          onConfirm={() => settleConfirmation(true)}
+          onCancel={() => settleConfirmation(false)}
+        />
+
+        <ConfirmDialog
+          open={blocker.state === "blocked"}
+          title="Leave with unsaved changes?"
+          description={`Your changes for ${formatRangeLabel(state.period.startDate, state.period.endDate)} have not been saved. Leaving this screen will discard them.`}
+          confirmLabel="Discard and leave"
+          tone="danger"
+          onConfirm={() => { setDirty(false); blocker.proceed?.(); }}
+          onCancel={() => blocker.reset?.()}
+        />
+      </div>
+    </UnsavedProvider>
+  );
 };
