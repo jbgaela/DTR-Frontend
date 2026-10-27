@@ -53,7 +53,7 @@ All form controls share the same border, surface, focus, disabled, hint, and err
 | --- | --- |
 | `src/views/LoginView.tsx` | Brand panel, labelled credentials, password visibility, local/server errors, pending state |
 | `src/views/DashboardView.tsx` | Greeting, completion ring, entered/missing/upcoming, next action, future-only state, four KPIs, date overview, recent entries, exact category summary |
-| `src/views/DailyEntryView.tsx` | Date navigation, attendance, accomplishments, server preview, manual overrides, validation, save/reset/delete, unsaved guard |
+| `src/views/DailyEntryView.tsx` | Date navigation, shift-defaulted workday attendance, accomplishments, server preview, manual overrides, validation, save/reset/delete, unsaved guard |
 | `src/views/ReviewView.tsx` | Summary metrics, filters, desktop table, mobile cards, exact categories, empty states |
 | `src/views/LeaveView.tsx` | Period-aware draft sync, date/day/reason validation, saved summary, save/delete confirmation |
 | `src/views/SettingsView.tsx` | Grouped employee/signoff/attendance/night settings, validation, dirty guard, shared-profile and inactive-setting notes |

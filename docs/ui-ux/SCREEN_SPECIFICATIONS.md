@@ -42,7 +42,7 @@ Empty, partial, complete, and future-only states are distinct. No combined total
 **Purpose:** Record or correct one date without leaving the screen.
 
 1. **Date navigation:** long date heading, previous/next, native date input constrained to the period, Today shortcut when applicable.
-2. **Attendance:** day type, calculation mode, time in/out, break, overnight clock-out. Leave/absent disable time controls but retain stored draft values. Changing to workday applies the profile break only when break is currently zero.
+2. **Attendance:** day type, calculation mode, time in/out, break, overnight clock-out. New workday drafts are prefilled from the profile shift start/end and standard break. If both times are cleared on a workday, the preview uses the shift start/end and Save persists those shift times; the form explains this and offers “Use shift times.” Rest, leave, and absent drafts are not auto-filled. Leave/absent disable time controls but retain stored draft values. Changing to workday applies the profile break only when break is currently zero and fills shift times only when both are empty.
 3. **Accomplishments:** activity, type, status, hours spent, task lines, remarks. One task per line; blank lines are filtered; 100-task/2,000-character limits are validated.
 4. **Calculated hours:** seven categories; preview state (calculating, ready, saved, unavailable); warning when a timed workday is below the server’s 8-hour regular minimum; manual override fields with exact category names.
 5. **Actions:** Save entry, Discard changes/Clear draft, Delete entry (saved records only, confirmed). Save is disabled for an unchanged saved record. Failed saves preserve the form and show the server error.
@@ -78,7 +78,7 @@ Client validation focuses the first invalid field. Unsaved changes are protected
 
 - Employee information: name (required), ID, position, project assignment.
 - Validation/signoff: validator and supervisor.
-- Attendance: shift start/end, standard break, regular-hour limit.
+- Attendance: shift start/end, standard break, regular-hour limit. Shift start/end also seed new workday time in/out defaults; helper text explains this.
 - Night differential: start/end, with midnight-crossing explanation.
 - Reporting timezone is displayed read-only.
 - Shared-profile warning explains that the backend stores one primary profile.

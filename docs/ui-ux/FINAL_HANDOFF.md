@@ -18,6 +18,7 @@ What changed:
 - A redesigned Login with password visibility, inline errors, and pending state.
 - A dashboard with completion, missing/upcoming counts, next action, future/complete states, date overview, recent entries, and exact hour categories.
 - A daily-entry workspace with date navigation, grouped attendance and accomplishments, server preview, manual overrides, field validation, save/reset/delete separation, and unsaved-change protection.
+- Shift-defaulted workdays: new workday drafts use the profile shift start/end and standard break; if both times are cleared, preview and save fall back to the shift schedule, with an explicit note and “Use shift times” action. Rest/leave/absent drafts are not auto-filled.
 - A period review with filters, summary metrics, desktop table, mobile cards, and edit navigation.
 - A leave form with period-aware draft reset, validation, saved-request context, and delete confirmation.
 - Grouped settings with validation, dirty guard, shared-profile warning, and accurate inactive-setting explanations.
@@ -185,13 +186,14 @@ Intentional differences are documented in `REGRESSION_REPORT.md` (URL routing, w
 See `TEST_RESULTS.md` for raw results. Summary:
 
 - `npm run check` (root and frontend): **passed**.
-- Frontend Vitest: **44/44 passed** across 8 files.
+- Frontend Vitest: **49/49 passed** across 8 files.
 - Backend `node --test`: **16/16 passed** in both bundled and authoritative backend.
-- Production build: **passed**; initial JS 454.32 kB / 138.50 kB gzip, with five lazy route chunks.
+- Production build: **passed**; initial JS 454.54 kB / 138.58 kB gzip, with five lazy route chunks.
 - axe-core WCAG A/AA: **0 violations** on six authenticated screens at 1440 px and five key screens at 390 px; zero violations in spot audits at 360, 768, 1024, and 1920 px.
 - Responsive probe: no horizontal document overflow at 360, 390, 768, 1024, 1280, 1440, 1920, or 2560 px.
 - Real backend API: preview 480 regular minutes, save 480 minutes, valid 179,609-byte DTR XLSX, valid 7,358-byte accomplishments XLSX, logout 204, post-logout session 401.
 - Real frontend + backend: login, dashboard, daily preview/save, leave period switch, settings save, and real workbook download initiated.
+- Shift-default verification: new workday prefilled from shift; clearing both times keeps the shift preview; saving blank times persisted shift times and 8.00 authoritative regular hours; rest-day and overnight cases covered by tests; fallback state passed axe at 1440/390 px.
 - Keyboard smoke: skip link first; focus rings visible; Escape closes account menu, period panel, and mobile drawer.
 - Production console probe: only the expected pre-login 401; no React warnings, uncaught exceptions, or route-level console errors.
 

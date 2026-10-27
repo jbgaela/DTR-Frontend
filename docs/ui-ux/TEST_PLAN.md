@@ -52,6 +52,7 @@ The root `npm run check` covers backend syntax checks plus frontend TypeScript. 
 - Rest day with zero hours counts as complete.
 - Next-action priority and future dates not treated as overdue.
 - Daily form round trip, task trimming, override-only-in-manual-mode, dirty signature.
+- Workday shift defaults (including overnight shifts), rest-day non-defaulting, and partial-time fallback rules.
 - Daily/leave/profile validation limits and messages.
 
 ## 5. Component test scope

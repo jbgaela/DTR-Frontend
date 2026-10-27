@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DailyRecord } from "../api";
-import { dailyFormSignature, dailyPayload, dailyPreviewInput, toDailyForm, zeroOverride } from "./daily";
+import { applyShiftFallback, dailyFormSignature, dailyPayload, dailyPreviewInput, hasShiftFallback, toDailyForm, zeroOverride } from "./daily";
 import { validateDaily, validateLeave, validateProfile } from "./validation";
 
 const record: DailyRecord = {
@@ -72,6 +72,31 @@ describe("daily form helpers", () => {
     const form = toDailyForm(record);
     const changedOverride = { ...form, override: { ...form.override, regularMinutes: 1 } };
     expect(dailyFormSignature(changedOverride)).toBe(dailyFormSignature(form));
+  });
+
+  it("uses the profile shift when both workday times are empty", () => {
+    const blank = { ...toDailyForm(record), clockInMinute: null, clockOutMinute: null, endsNextDay: false };
+    expect(hasShiftFallback(blank)).toBe(true);
+    expect(applyShiftFallback(blank, profile)).toMatchObject({ clockInMinute: 480, clockOutMinute: 1020, endsNextDay: false });
+
+    const overnightProfile = { ...profile, shiftStartMinute: 1320, shiftEndMinute: 360 };
+    expect(applyShiftFallback(blank, overnightProfile)).toMatchObject({ clockInMinute: 1320, clockOutMinute: 360, endsNextDay: true });
+  });
+
+  it("does not apply the shift fallback to rest days or partially entered times", () => {
+    const restDay = { ...toDailyForm(record), dayType: "REST_DAY" as const, clockInMinute: null, clockOutMinute: null };
+    expect(hasShiftFallback(restDay)).toBe(false);
+    expect(applyShiftFallback(restDay, profile)).toBe(restDay);
+
+    const partial = { ...toDailyForm(record), clockInMinute: 480, clockOutMinute: null };
+    expect(hasShiftFallback(partial)).toBe(false);
+    expect(applyShiftFallback(partial, profile)).toBe(partial);
+  });
+
+  it("keeps explicit workday times when they are present", () => {
+    const form = toDailyForm(record);
+    expect(hasShiftFallback(form)).toBe(false);
+    expect(applyShiftFallback(form, profile)).toBe(form);
   });
 });
 

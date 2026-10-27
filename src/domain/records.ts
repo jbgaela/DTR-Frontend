@@ -26,28 +26,39 @@ export const dateRange = (start: string, end: string) => eachDateInRange(start, 
 
 export const defaultDayType = (date: string): DayType => isWeekend(date) ? "REST_DAY" : "WORKDAY";
 
-export const blankRecord = (date: string, profile: Profile): Omit<DailyRecord, "id"> => ({
-  workDate: date,
-  dayType: defaultDayType(date),
-  clockInMinute: null,
-  clockOutMinute: null,
-  endsNextDay: false,
-  breakMinutes: defaultDayType(date) === "WORKDAY" ? profile.standardBreakMinutes : 0,
-  calculationMode: "AUTO",
-  regularMinutes: 0,
-  nightDiffMinutes: 0,
-  regularOtMinutes: 0,
-  nightDiffOtMinutes: 0,
-  restDayMinutes: 0,
-  restDayOtMinutes: 0,
-  holidayMinutes: 0,
-  activity: "API Development",
-  accomplishmentType: "",
-  accomplishmentStatus: "",
-  hoursSpentMinutes: 0,
-  remarks: "",
-  tasks: []
+export const shiftDefaults = (profile: Profile) => ({
+  clockInMinute: profile.shiftStartMinute,
+  clockOutMinute: profile.shiftEndMinute,
+  endsNextDay: profile.shiftEndMinute <= profile.shiftStartMinute
 });
+
+export const blankRecord = (date: string, profile: Profile): Omit<DailyRecord, "id"> => {
+  const dayType = defaultDayType(date);
+  const shift = shiftDefaults(profile);
+  const usesShift = dayType === "WORKDAY";
+  return {
+    workDate: date,
+    dayType,
+    clockInMinute: usesShift ? shift.clockInMinute : null,
+    clockOutMinute: usesShift ? shift.clockOutMinute : null,
+    endsNextDay: usesShift ? shift.endsNextDay : false,
+    breakMinutes: usesShift ? profile.standardBreakMinutes : 0,
+    calculationMode: "AUTO",
+    regularMinutes: 0,
+    nightDiffMinutes: 0,
+    regularOtMinutes: 0,
+    nightDiffOtMinutes: 0,
+    restDayMinutes: 0,
+    restDayOtMinutes: 0,
+    holidayMinutes: 0,
+    activity: "API Development",
+    accomplishmentType: "",
+    accomplishmentStatus: "",
+    hoursSpentMinutes: 0,
+    remarks: "",
+    tasks: []
+  };
+};
 
 export const toHours = (record: DailyRecordValue): DailyHours => ({
   regularMinutes: record.regularMinutes,

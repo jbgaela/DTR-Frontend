@@ -11,8 +11,8 @@ No test is marked passed unless it was executed. Items that were not run are lis
 | --- | --- |
 | `npm run check` (frontend) | **Passed** — TypeScript strict check |
 | `npm run check` (root) | **Passed** — backend syntax checks + frontend TypeScript |
-| `npm test` (frontend) | **Passed** — 8 test files, 44 tests |
-| `npm test` (root) | **Passed** — 16 backend tests + 44 frontend tests |
+| `npm test` (frontend) | **Passed** — 8 test files, 49 tests |
+| `npm test` (root) | **Passed** — 16 backend tests + 49 frontend tests |
 | `npm test` (authoritative backend) | **Passed** — 16 tests |
 | `npm run build` (frontend) | **Passed** |
 
@@ -21,8 +21,8 @@ No test is marked passed unless it was executed. Items that were not run are lis
 Final production build:
 
 - 2084 modules transformed.
-- Initial JS: `index-C-H4tr3Z.js` — 454.32 kB (138.50 kB gzip).
-- Lazy route chunks: `DailyEntryView` 13.83 kB, `ReviewView` 8.89 kB, `SettingsView` 7.52 kB, `LeaveView` 7.49 kB, `ExportsView` 6.67 kB, shared `validation` 6.22 kB, plus small icon chunks.
+- Initial JS: `index-Cy1yWSVj.js` — 454.54 kB (138.58 kB gzip).
+- Lazy route chunks: `DailyEntryView` 14.66 kB, `ReviewView` 8.89 kB, `SettingsView` 7.52 kB, `LeaveView` 7.49 kB, `ExportsView` 6.67 kB, shared `validation` 6.42 kB, plus small icon chunks.
 - CSS: 50.90 kB (10.00 kB gzip).
 - Inter variable font files split by unicode range; Latin normal 48.25 kB.
 - `index.html` 0.51 kB.
@@ -33,7 +33,7 @@ Baseline build before the redesign was 88 modules, 268.32 kB JS (80.58 kB gzip),
 
 ```
 Test Files  8 passed (8)
-Tests       44 passed (44)
+Tests       49 passed (49)
 ```
 
 Coverage by file:
@@ -41,13 +41,30 @@ Coverage by file:
 | Test file | Tests |
 | --- | --- |
 | `domain/date.test.ts` | 8 |
-| `domain/records.test.ts` | 5 |
+| `domain/records.test.ts` | 7 |
 | `domain/period.test.ts` | 6 |
-| `domain/daily.test.ts` + validation | 10 |
+| `domain/daily.test.ts` + validation | 13 |
 | `views/LoginView.test.tsx` | 4 |
 | `views/DashboardView.test.tsx` | 4 |
 | `views/ReviewView.test.tsx` | 4 |
 | `components/PeriodSelector.test.tsx` | 3 |
+
+## 3a. Shift-default workday verification
+
+Feature verified after the main handoff on the same production build:
+
+| Check | Result |
+| --- | --- |
+| New workday (Oct 27) opens with shift times | 08:00–17:00 prefilled; break 60; preview 8.00 regular |
+| Clear both time fields | Note explains shift fallback; preview remains 8.00; “Use shift times” action available |
+| Save with both time fields empty | Saved record returned 08:00–17:00 and 8.00 authoritative regular hours |
+| Rest day (weekend) draft | Times remain empty; no shift fallback |
+| Overnight shift unit case | 22:00–06:00 sets `endsNextDay` and uses shift fallback |
+| Partial time entry | No fallback; existing validation still requires both times |
+| Blank-times fallback accessibility | 0 axe-core WCAG A/AA violations at 1440 px and 390 px; no horizontal overflow |
+| Server contract | No backend or payload shape change; the fallback is applied before submit |
+
+The fixture server period id was corrected during this verification; it uses a slash-free test id. This affected the synthetic fixture only.
 
 ## 4. Backend regression
 

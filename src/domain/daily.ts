@@ -1,5 +1,5 @@
-import type { DailyHoursPreviewInput, DailyRecord, DailyRecordInput, DayType } from "../api";
-import type { DailyRecordValue } from "./records";
+import type { DailyHoursPreviewInput, DailyRecord, DailyRecordInput, DayType, Profile } from "../api";
+import { shiftDefaults, type DailyRecordValue } from "./records";
 
 export type OverrideKey = "regularMinutes" | "nightDiffMinutes" | "regularOtMinutes" | "nightDiffOtMinutes" | "restDayMinutes" | "restDayOtMinutes" | "holidayMinutes";
 export type OverrideMap = Record<OverrideKey, number>;
@@ -83,6 +83,13 @@ export const dailyPreviewInput = (form: DailyForm): DailyHoursPreviewInput => ({
 });
 
 export const dailyFormSignature = (form: DailyForm) => JSON.stringify({ ...form, override: form.calculationMode === "OVERRIDE" ? form.override : undefined });
+
+export const applyShiftFallback = (form: DailyForm, profile: Profile): DailyForm => {
+  if (form.dayType !== "WORKDAY" || form.clockInMinute !== null || form.clockOutMinute !== null) return form;
+  return { ...form, ...shiftDefaults(profile) };
+};
+
+export const hasShiftFallback = (form: DailyForm) => form.dayType === "WORKDAY" && form.clockInMinute === null && form.clockOutMinute === null;
 
 export const taskLines = (text: string) => text.split("\n").map((task) => task.trim()).filter(Boolean);
 

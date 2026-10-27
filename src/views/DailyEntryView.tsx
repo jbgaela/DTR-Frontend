@@ -5,10 +5,10 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Badge, Button, Card, CardHeader, CheckboxField, InlineAlert, PageHeader, SelectField, TextField, TextareaField, IconButton, cn } from "../components/ui";
 import { usePageDirty } from "../components/unsaved";
 import { messages as m } from "../constants/messages";
-import { dailyFormSignature, dailyPayload, dailyPreviewInput, overrideFields, recordStatus, taskLines, toDailyForm, type DailyForm, type OverrideKey } from "../domain/daily";
+import { applyShiftFallback, dailyFormSignature, dailyPayload, dailyPreviewInput, hasShiftFallback, overrideFields, recordStatus, taskLines, toDailyForm, type DailyForm, type OverrideKey } from "../domain/daily";
 import { displayToIso, formatLongDate, formatRangeLabel, isoToDisplay, periodKindLabel } from "../domain/date";
-import { dayTypeLabel, hours } from "../domain/format";
-import { blankRecord, toHours, type DailyRecordValue } from "../domain/records";
+import { dayTypeLabel, formatClock, hours } from "../domain/format";
+import { blankRecord, shiftDefaults, toHours, type DailyRecordValue } from "../domain/records";
 import { firstErrorKey, validateDaily, type FieldErrors } from "../domain/validation";
 import { useDailyHoursPreview } from "../hooks/useDailyHoursPreview";
 
@@ -64,19 +64,21 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
   usePageDirty(dirty);
 
   const setField = <K extends keyof DailyForm,>(key: K, value: DailyForm[K]) => setForm((current) => ({ ...current, [key]: value }));
-  const previewInput = useMemo(() => dailyPreviewInput(form), [form.dayType, form.clockInMinute, form.clockOutMinute, form.endsNextDay, form.breakMinutes, form.calculationMode, form.override]);
+  const effectiveForm = useMemo(() => applyShiftFallback(form, profile), [form, profile]);
+  const previewInput = useMemo(() => dailyPreviewInput(effectiveForm), [effectiveForm]);
   const preview = useDailyHoursPreview(previewInput);
   const inputSignature = JSON.stringify(previewInput);
   const saved = recordStatus(record) === "saved";
   const showingConfirmed = saved && inputSignature === confirmed.signature;
   const displayHours = showingConfirmed ? confirmed.hours : preview.hours;
   const timeDisabled = form.dayType === "LEAVE" || form.dayType === "ABSENT";
+  const usingShiftFallback = hasShiftFallback(form);
   const selectedIndex = dates.indexOf(selectedDate);
   const previousDate = selectedIndex > 0 ? dates[selectedIndex - 1] : null;
   const nextDate = selectedIndex >= 0 && selectedIndex < dates.length - 1 ? dates[selectedIndex + 1] : null;
   const tasks = taskLines(form.tasksText);
   const invalidCount = Object.keys(errors).length;
-  const workdayShortfall = Boolean(displayHours && form.dayType === "WORKDAY" && form.clockInMinute !== null && form.clockOutMinute !== null && displayHours.regularMinutes < 480);
+  const workdayShortfall = Boolean(displayHours && effectiveForm.dayType === "WORKDAY" && effectiveForm.clockInMinute !== null && effectiveForm.clockOutMinute !== null && displayHours.regularMinutes < 480);
   const canPreview = preview.enabled;
   const previewLabel = showingConfirmed ? "Saved" : preview.state === "calculating" ? "Calculating" : preview.state === "error" ? "Unavailable" : canPreview ? "Preview" : "No preview";
 
@@ -86,9 +88,12 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
     setForm((current) => ({
       ...current,
       dayType: value,
+      ...(value === "WORKDAY" && current.clockInMinute === null && current.clockOutMinute === null ? shiftDefaults(profile) : {}),
       breakMinutes: value === "WORKDAY" && current.breakMinutes === 0 ? profile.standardBreakMinutes : current.breakMinutes
     }));
   };
+
+  const useShiftTimes = () => setForm((current) => ({ ...current, ...shiftDefaults(profile) }));
 
   const reset = () => {
     setForm(baseline);
@@ -96,14 +101,15 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
   };
 
   const handleSave = async () => {
-    const nextErrors = validateDaily(form);
+    const formToSave = applyShiftFallback(form, profile);
+    const nextErrors = validateDaily(formToSave);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       const first = firstErrorKey(nextErrors);
       if (first) window.requestAnimationFrame(() => document.getElementById(fieldIdFor(first))?.focus());
       return;
     }
-    const savedRecord = await onSave(dailyPayload(form));
+    const savedRecord = await onSave(dailyPayload(formToSave));
     if (savedRecord) {
       const next = toDailyForm(savedRecord);
       setForm(next);
@@ -161,8 +167,8 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
           <Card>
             <CardHeader
               title={m.attendance}
-              description="Record the day type, in/out times, break, and how hours should be calculated."
-              action={<Badge tone={dirty ? "warning" : saved ? "success" : "neutral"}>{dirty ? "Unsaved changes" : saved ? "Saved entry" : "New entry"}</Badge>}
+              description="New workdays default to your shift start and end. Both times remain editable."
+              action={<Badge tone={dirty || usingShiftFallback ? "warning" : saved ? "success" : "neutral"}>{dirty ? "Unsaved changes" : saved && usingShiftFallback ? "Saved without times" : saved ? "Saved entry" : "New entry"}</Badge>}
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectField id="daily-dayType" label={m.dayType} value={form.dayType} onChange={(event) => changeDayType(event.target.value as DailyForm["dayType"])} error={errors.dayType} required>
@@ -207,6 +213,12 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
                 <CheckboxField label={m.overnight} hint="Use this when the shift ends after midnight." checked={form.endsNextDay} onChange={(event) => setField("endsNextDay", event.target.checked)} disabled={timeDisabled} />
               </div>
             </div>
+            {usingShiftFallback && (
+              <div className="mt-4 flex flex-col gap-2.5 rounded-lg border border-brand/15 bg-brand-soft px-3.5 py-3 text-[12px] leading-relaxed text-brand sm:flex-row sm:items-center sm:justify-between">
+                <p>No time in or time out entered. Shift hours ({formatClock(profile.shiftStartMinute)} – {formatClock(profile.shiftEndMinute)}) will be used for preview and save.</p>
+                <Button size="sm" variant="secondary" onClick={useShiftTimes}>Use shift times</Button>
+              </div>
+            )}
             {timeDisabled && <p className="mt-4 rounded-lg bg-brand-soft px-3.5 py-2.5 text-[12px] leading-relaxed text-brand">{dayTypeLabel(form.dayType)} days do not calculate worked hours. Any time values already entered are kept in the form.</p>}
           </Card>
 
@@ -259,6 +271,7 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
             {!showingConfirmed && preview.state === "calculating" && <p className="mt-3 flex items-center gap-1.5 text-[12px] text-muted" aria-live="polite"><LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Calculating hours...</p>}
             {!showingConfirmed && preview.state === "error" && <InlineAlert tone="warning" className="mt-3">{m.hoursPreviewError}</InlineAlert>}
             {!showingConfirmed && preview.state === "idle" && <p className="mt-3 text-[11px] leading-relaxed text-muted">{form.dayType === "LEAVE" || form.dayType === "ABSENT" ? "Leave and absent days calculate zero hours." : "Enter both a time in and a time out to request a preview."}</p>}
+            {usingShiftFallback && <p className="mt-3 text-[11px] leading-relaxed text-brand">Calculated from your shift schedule because both time fields are empty.</p>}
             {workdayShortfall && <InlineAlert tone="warning" className="mt-3">A timed workday must total at least 8 regular hours before the server will accept it. Adjust the times or break.</InlineAlert>}
 
             {form.calculationMode === "OVERRIDE" && (
@@ -290,13 +303,13 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
           <Card>
             <CardHeader title="Actions" description={saved ? "This date has a stored record." : "This date has no stored record yet."} />
             <div className="grid gap-2.5">
-              <Button className="w-full" size="lg" loading={saving} disabled={saved && !dirty} onClick={() => void handleSave()} icon={<Save className="size-4" aria-hidden="true" />}>{saving ? "Saving entry..." : m.saveEntry}</Button>
+              <Button className="w-full" size="lg" loading={saving} disabled={saved && !dirty && !usingShiftFallback} onClick={() => void handleSave()} icon={<Save className="size-4" aria-hidden="true" />}>{saving ? "Saving entry..." : m.saveEntry}</Button>
               <Button className="w-full" variant="secondary" disabled={!dirty || saving} onClick={reset} icon={<RotateCcw className="size-4" aria-hidden="true" />}>{saved ? "Discard changes" : "Clear draft"}</Button>
               {saved && <Button className="w-full" variant="danger-soft" loading={clearing} disabled={saving} onClick={() => setDeleteOpen(true)} icon={<Trash2 className="size-4" aria-hidden="true" />}>{clearing ? "Deleting entry..." : "Delete entry"}</Button>}
             </div>
             <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-muted">
               <CalendarDays className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              {dirty ? "Unsaved edits stay on this date until you save, discard, or leave." : saved ? "Saved values match the current form." : "Nothing has been saved for this date."}
+              {dirty ? "Unsaved edits stay on this date until you save, discard, or leave." : usingShiftFallback ? "No times are stored. Save to apply the shift hours." : saved ? "Saved values match the current form." : "Nothing has been saved for this date."}
             </p>
           </Card>
         </aside>

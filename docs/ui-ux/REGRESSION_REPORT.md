@@ -68,6 +68,10 @@ The UI now blocks clearly invalid input before the API call (missing paired time
 
 Drafts are protected by a shared guard. Resetting a draft and deleting a stored record are separate actions. `Clear day` was removed.
 
+### Shift-based workday defaults
+
+New workday drafts are prefilled with the profile shift start/end (and standard break), so a normal workday can be recorded without typing times. If both time fields are cleared on a workday, the preview uses the shift schedule and Save persists those shift times; a visible note and “Use shift times” action keep the behavior explicit. Rest days, leave, and absent days remain empty. This is input defaulting only — the backend still calculates and validates all hours from the submitted times.
+
 ### Lazy route loading
 
 Daily Entry, Review, Leave, Settings, and Exports are lazy-loaded. Dashboard and Login remain in the initial bundle. PDF/browser behavior is unaffected.

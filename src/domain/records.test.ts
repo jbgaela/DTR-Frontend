@@ -45,13 +45,30 @@ const record = (overrides: Partial<DailyRecord>): DailyRecord => ({
 });
 
 describe("record helpers", () => {
-  it("creates a blank workday with the profile break", () => {
+  it("creates a blank workday with the shift times and profile break", () => {
     const blank = blankRecord("10/27/2026", profile);
     expect(blank.dayType).toBe("WORKDAY");
     expect(blank.breakMinutes).toBe(60);
-    expect(blank.clockInMinute).toBeNull();
+    expect(blank.clockInMinute).toBe(480);
+    expect(blank.clockOutMinute).toBe(1020);
+    expect(blank.endsNextDay).toBe(false);
     expect(blank.calculationMode).toBe("AUTO");
     expect(blank.tasks).toEqual([]);
+  });
+
+  it("sets an overnight flag when the shift crosses midnight", () => {
+    const overnight = blankRecord("10/27/2026", { ...profile, shiftStartMinute: 1320, shiftEndMinute: 360 });
+    expect(overnight.clockInMinute).toBe(1320);
+    expect(overnight.clockOutMinute).toBe(360);
+    expect(overnight.endsNextDay).toBe(true);
+  });
+
+  it("keeps rest-day drafts empty until work is entered", () => {
+    const restDay = blankRecord("10/24/2026", profile);
+    expect(restDay.dayType).toBe("REST_DAY");
+    expect(restDay.clockInMinute).toBeNull();
+    expect(restDay.clockOutMinute).toBeNull();
+    expect(restDay.breakMinutes).toBe(0);
   });
 
   it("defaults Saturdays and Sundays to rest days", () => {
