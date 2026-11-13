@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { DailyRecord, Period } from "../api";
+import type { DailyRecord, HolidayCalendar, Period } from "../api";
 import { buildDateEntries, completionFor, missingSummaryFor } from "../domain/period";
 import { sumRecords } from "../domain/records";
 import { ReviewView } from "./ReviewView";
@@ -41,9 +41,10 @@ const records = [
 const period: Period = { id: "period-1", startDate: "10/24/2026", endDate: "10/31/2026", dailyRecords: records, leaveRequest: null };
 const entries = buildDateEntries([...dates, "10/28/2026", "10/29/2026", "10/30/2026", "10/31/2026"], records, today);
 
-const renderView = (onSelect = vi.fn()) => render(
+const renderView = (onSelect = vi.fn(), holidayCalendar?: HolidayCalendar) => render(
   <ReviewView
     period={period}
+    holidayCalendar={holidayCalendar}
     entries={entries}
     completion={completionFor(entries)}
     missingSummary={missingSummaryFor(entries)}
@@ -98,6 +99,19 @@ describe("ReviewView", () => {
       />
     );
     expect(screen.getByText("No daily entries yet")).toBeInTheDocument();
+  });
+
+  it("marks saved workdays that overlap a non-working holiday", () => {
+    const holidayCalendar: HolidayCalendar = {
+      version: "ph-national-2026-v1",
+      status: "REVIEWED",
+      years: [{ year: 2026, status: "REVIEWED" }],
+      holidays: [{ date: "2026-10-25", name: "Synthetic Holiday", classification: "SPECIAL_NON_WORKING", isNonWorking: true, source: "OFFICIAL_PROCLAMATION", sourceUrl: "https://example.gov.ph" }]
+    };
+
+    renderView(vi.fn(), holidayCalendar);
+
+    expect(screen.getAllByText("Holiday conflict").length).toBeGreaterThan(0);
   });
 });
 

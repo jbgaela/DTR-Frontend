@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import type { CurrentResponse, DailyRecord, DailyRecordInput, LeaveRequest, Profile, SessionResponse } from "../api";
+import type { CurrentResponse, DailyRecord, DailyRecordInput, DaySaveResult, HolidayAcknowledgement, LeaveRequest, Profile, SessionResponse } from "../api";
 import { ApiError, api, setUnauthorizedHandler } from "../api";
 import { messages as m } from "../constants/messages";
 import { currentSemiMonthlyRange, displayToIso, eachDateInRange, isValidRange, isoToDisplay, todayInTimezone } from "../domain/date";
 import { buildDateEntries, completionFor, missingSummaryFor, nextActionFor, nextMissingFor } from "../domain/period";
 import { blankRecord, dateRange, findRecord, sumRecords } from "../domain/records";
+import { holidayConflictFromFields } from "../domain/holidays";
 import { queryKeys } from "../query";
 import type { Notice, NoticeKind } from "../components/Toast";
 
@@ -101,8 +102,8 @@ export const useDtrApp = () => {
 
   const currentRecord = useMemo(() => {
     if (!selectedDate) return null;
-    return findRecord(records, selectedDate) ?? blankRecord(selectedDate, profile);
-  }, [records, selectedDate, profile]);
+    return findRecord(records, selectedDate) ?? blankRecord(selectedDate, profile, queryData?.holidayCalendar);
+  }, [records, selectedDate, profile, queryData?.holidayCalendar]);
 
   const updateCurrent = useCallback((updater: (current: CurrentResponse) => CurrentResponse) => {
     queryClient.setQueryData<CurrentResponse>(currentKey, (current) => current ? updater(current) : current);
@@ -149,13 +150,16 @@ export const useDtrApp = () => {
   }, [notify]);
 
   const saveDayMutation = useMutation({
-    mutationFn: ({ periodId, date, value }: { periodId: string; date: string; value: DailyRecordInput }) => api.saveDay(periodId, date, value),
+    mutationFn: ({ periodId, date, value, acknowledgement }: { periodId: string; date: string; value: DailyRecordInput; acknowledgement?: HolidayAcknowledgement }) => api.saveDay(periodId, date, value, acknowledgement),
     onSuccess: async (saved: DailyRecord) => {
       updateCurrent((current) => ({ ...current, period: { ...current.period, dailyRecords: [...current.period.dailyRecords.filter((record) => record.workDate !== saved.workDate), saved].sort((a, b) => a.workDate.localeCompare(b.workDate)) } }));
       await invalidateCurrent();
       saveSuccess(m.dailySaved);
     },
-    onError: (reason) => setOperationError(messageFor(reason, m.saveError))
+    onError: (reason) => {
+      if (reason instanceof ApiError && reason.code === "HOLIDAY_WORKDAY_CONFIRMATION_REQUIRED") return;
+      setOperationError(messageFor(reason, m.saveError));
+    }
   });
   const clearDayMutation = useMutation({
     mutationFn: ({ periodId, date }: { periodId: string; date: string }) => api.deleteDay(periodId, date),
@@ -303,13 +307,18 @@ export const useDtrApp = () => {
     }
   }, [queryClient, navigate]);
 
-  const saveDay = useCallback(async (value: DailyRecordInput) => {
-    if (!period || !selectedDate) return null;
+  const saveDay = useCallback(async (value: DailyRecordInput, acknowledgement?: HolidayAcknowledgement): Promise<DaySaveResult> => {
+    if (!period || !selectedDate) return { status: "failed" };
     setOperationError("");
     try {
-      return await saveDayMutation.mutateAsync({ periodId: period.id, date: selectedDate, value });
-    } catch {
-      return null;
+      const record = await saveDayMutation.mutateAsync({ periodId: period.id, date: selectedDate, value, acknowledgement });
+      return { status: "saved", record };
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.code === "HOLIDAY_WORKDAY_CONFIRMATION_REQUIRED") {
+        const conflict = holidayConflictFromFields(reason.fields);
+        if (conflict) return { status: "holiday-confirmation-required", ...conflict };
+      }
+      return { status: "failed" };
     }
   }, [period, selectedDate, saveDayMutation]);
 
@@ -334,6 +343,7 @@ export const useDtrApp = () => {
 
   return {
     period,
+    holidayCalendar: queryData?.holidayCalendar,
     profile,
     leave: period?.leaveRequest ?? null,
     selectedDate,

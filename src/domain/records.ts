@@ -1,5 +1,6 @@
-import type { DailyHours, DailyRecord, DayType, Profile } from "../api";
+import type { DailyHours, DailyRecord, DayType, HolidayCalendar, Profile } from "../api";
 import { eachDateInRange, isWeekend } from "./date";
+import { nonWorkingHolidayForDate } from "./holidays";
 
 export type DailyRecordValue = Omit<DailyRecord, "id"> | DailyRecord;
 export type HourTotals = {
@@ -24,7 +25,8 @@ export const emptyTotals = (): HourTotals => ({
 
 export const dateRange = (start: string, end: string) => eachDateInRange(start, end);
 
-export const defaultDayType = (date: string): DayType => isWeekend(date) ? "REST_DAY" : "WORKDAY";
+export const defaultDayType = (date: string, holidayCalendar?: HolidayCalendar): DayType =>
+  nonWorkingHolidayForDate(holidayCalendar, date) ? "HOLIDAY" : isWeekend(date) ? "REST_DAY" : "WORKDAY";
 
 export const shiftDefaults = (profile: Profile) => ({
   clockInMinute: profile.shiftStartMinute,
@@ -32,8 +34,8 @@ export const shiftDefaults = (profile: Profile) => ({
   endsNextDay: profile.shiftEndMinute <= profile.shiftStartMinute
 });
 
-export const blankRecord = (date: string, profile: Profile): Omit<DailyRecord, "id"> => {
-  const dayType = defaultDayType(date);
+export const blankRecord = (date: string, profile: Profile, holidayCalendar?: HolidayCalendar): Omit<DailyRecord, "id"> => {
+  const dayType = defaultDayType(date, holidayCalendar);
   const shift = shiftDefaults(profile);
   const usesShift = dayType === "WORKDAY";
   return {

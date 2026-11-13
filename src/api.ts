@@ -16,6 +16,27 @@ export class ApiError extends Error {
 
 export type DayType = "WORKDAY" | "REST_DAY" | "HOLIDAY" | "LEAVE" | "ABSENT";
 export type CalculationMode = "AUTO" | "OVERRIDE";
+export type HolidayClassification = "REGULAR" | "SPECIAL_NON_WORKING" | "SPECIAL_WORKING";
+export type Holiday = {
+  date: string;
+  name: string;
+  classification: HolidayClassification;
+  isNonWorking: boolean;
+  source: "OFFICIAL_PROCLAMATION" | "DATE_HOLIDAYS";
+  sourceUrl: string;
+};
+export type HolidayCalendarYear = { year: number; status: "REVIEWED" | "ESTIMATE" };
+export type HolidayCalendar = {
+  version: string;
+  status: "REVIEWED" | "ESTIMATE";
+  years: HolidayCalendarYear[];
+  holidays: Holiday[];
+};
+export type HolidayAcknowledgement = { date: string; calendarVersion: string };
+export type DaySaveResult =
+  | { status: "saved"; record: DailyRecord }
+  | { status: "holiday-confirmation-required"; calendarVersion: string; holidays: Holiday[] }
+  | { status: "failed" };
 
 export type Profile = {
   employeeName: string;
@@ -73,7 +94,7 @@ export type LeaveRequest = {
 };
 
 export type Period = { id: string; startDate: string; endDate: string; dailyRecords: DailyRecord[]; leaveRequest: LeaveRequest | null };
-export type CurrentResponse = { period: Period; profile: Profile };
+export type CurrentResponse = { period: Period; profile: Profile; holidayCalendar?: HolidayCalendar };
 export type AuthUser = { username: string };
 export type SessionResponse = { user: AuthUser };
 export type ExportKind = "dtr" | "accomplishments";
@@ -128,7 +149,7 @@ export const api = {
   profile: () => request<Profile>("/api/profile"),
   saveProfile: (profile: Profile) => request<Profile>("/api/profile", { method: "PUT", body: JSON.stringify(profile) }),
   previewDailyHours: (body: DailyHoursPreviewInput, signal?: AbortSignal) => request<DailyHours>("/api/daily-hours/preview", { method: "POST", body: JSON.stringify(body), signal }),
-  saveDay: (periodId: string, date: string, body: unknown) => request<DailyRecord>(`/api/periods/${periodId}/days?date=${encodeURIComponent(date)}`, { method: "PUT", body: JSON.stringify(body) }),
+  saveDay: (periodId: string, date: string, body: DailyRecordInput, acknowledgement?: HolidayAcknowledgement) => request<DailyRecord>(`/api/periods/${periodId}/days?date=${encodeURIComponent(date)}`, { method: "PUT", body: JSON.stringify({ ...body, ...(acknowledgement ? { holidayAcknowledgement: acknowledgement } : {}) }) }),
   deleteDay: (periodId: string, date: string) => request<void>(`/api/periods/${periodId}/days?date=${encodeURIComponent(date)}`, { method: "DELETE" }),
   saveLeave: (periodId: string, leave: LeaveRequest) => request<LeaveRequest>(`/api/periods/${periodId}/leave`, { method: "PUT", body: JSON.stringify(leave) }),
   deleteLeave: (periodId: string) => request<void>(`/api/periods/${periodId}/leave`, { method: "DELETE" }),

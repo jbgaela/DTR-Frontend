@@ -1,14 +1,16 @@
-import { AlertCircle, ArrowRight, CalendarCheck2, CalendarDays, CheckCircle2, Clock3, Coffee, ListChecks, MoonStar, Plus, Sun } from "lucide-react";
-import type { Period, Profile } from "../api";
+import { AlertCircle, ArrowRight, CalendarCheck2, CalendarDays, CheckCircle2, Clock3, Coffee, ListChecks, MoonStar, Plus, Sun, TriangleAlert } from "lucide-react";
+import type { HolidayCalendar, Period, Profile } from "../api";
 import { Badge, Button, Card, CardHeader, EmptyState, MetricCard, PageHeader, ProgressBar, ProgressRing, cn } from "../components/ui";
 import type { Completion, DateEntry, MissingSummary } from "../domain/period";
 import type { HourTotals } from "../domain/records";
 import { compareDisplayDates, formatLongDate, formatMonthDay, formatRangeLabel, formatWeekday, periodKindLabel } from "../domain/date";
 import { dayTypeLabel, firstName, formatClock, hours, pluralize } from "../domain/format";
+import { nonWorkingHolidayForDate } from "../domain/holidays";
 
 type DashboardViewProps = {
   profile: Profile;
   period: Period;
+  holidayCalendar?: HolidayCalendar;
   entries: DateEntry[];
   completion: Completion;
   missingSummary: MissingSummary;
@@ -29,7 +31,8 @@ const greetingFor = (timezone: string) => {
   }
 };
 
-const DateTile = ({ entry, onSelect }: { entry: DateEntry; onSelect: (date: string) => void }) => {
+const DateTile = ({ entry, holidayCalendar, onSelect }: { entry: DateEntry; holidayCalendar?: HolidayCalendar; onSelect: (date: string) => void }) => {
+  const workdayHoliday = entry.record?.dayType === "WORKDAY" ? nonWorkingHolidayForDate(holidayCalendar, entry.date) : null;
   const statusLabel = entry.status === "saved" ? dayTypeLabel(entry.record!.dayType) : entry.status === "today" ? "Today · missing" : entry.status === "missing" ? "Missing entry" : "Upcoming";
   const icon = entry.status === "saved"
     ? <CheckCircle2 className="size-4 text-success" aria-hidden="true" />
@@ -56,12 +59,13 @@ const DateTile = ({ entry, onSelect }: { entry: DateEntry; onSelect: (date: stri
       </span>
       <span className="mt-1 block text-[15px] font-semibold tracking-[-.01em] text-ink">{formatMonthDay(entry.date)}</span>
       <span className={cn("mt-1 block text-[11px] font-medium", entry.status === "saved" ? "text-success" : entry.status === "missing" || entry.status === "today" ? "text-warning" : "text-muted")}>{statusLabel}</span>
+      {workdayHoliday && <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-warning"><TriangleAlert className="size-3" aria-hidden="true" />Holiday conflict</span>}
       <span className="sr-only">Open daily entry</span>
     </button>
   );
 };
 
-export const DashboardView = ({ profile, period, entries, completion, missingSummary, totals, today, onSelect, onGoTo }: DashboardViewProps) => {
+export const DashboardView = ({ profile, period, holidayCalendar, entries, completion, missingSummary, totals, today, onSelect, onGoTo }: DashboardViewProps) => {
   const saved = entries.filter((entry) => entry.record).sort((left, right) => compareDisplayDates(right.date, left.date));
   const nextAction = entries.find((entry) => entry.status === "missing") ?? entries.find((entry) => entry.status === "today") ?? null;
   const todayEntry = entries.find((entry) => entry.date === today);
@@ -167,7 +171,7 @@ export const DashboardView = ({ profile, period, entries, completion, missingSum
           }
         />
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-          {entries.map((entry) => <DateTile key={entry.date} entry={entry} onSelect={onSelect} />)}
+          {entries.map((entry) => <DateTile key={entry.date} entry={entry} holidayCalendar={holidayCalendar} onSelect={onSelect} />)}
         </div>
       </Card>
 

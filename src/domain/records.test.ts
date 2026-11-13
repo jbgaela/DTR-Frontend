@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DailyRecord, Profile } from "../api";
+import type { DailyRecord, HolidayCalendar, Profile } from "../api";
 import { blankRecord, dateRange, defaultDayType, findRecord, sumRecords, toHours } from "./records";
 
 const profile: Profile = {
@@ -17,6 +17,13 @@ const profile: Profile = {
   nightEndMinute: 360,
   workdayMask: 62,
   timezone: "Asia/Manila"
+};
+
+const holidayCalendar: HolidayCalendar = {
+  version: "ph-national-2026-v1",
+  status: "REVIEWED",
+  years: [{ year: 2026, status: "REVIEWED" }],
+  holidays: [{ date: "2026-11-01", name: "All Saints' Day", classification: "SPECIAL_NON_WORKING", isNonWorking: true, source: "OFFICIAL_PROCLAMATION", sourceUrl: "https://example.gov.ph" }]
 };
 
 const record = (overrides: Partial<DailyRecord>): DailyRecord => ({
@@ -75,6 +82,12 @@ describe("record helpers", () => {
     expect(defaultDayType("10/24/2026")).toBe("REST_DAY");
     expect(defaultDayType("10/25/2026")).toBe("REST_DAY");
     expect(defaultDayType("10/26/2026")).toBe("WORKDAY");
+  });
+
+  it("defaults a non-working holiday to Holiday even when it falls on a weekend", () => {
+    expect(defaultDayType("11/01/2026", holidayCalendar)).toBe("HOLIDAY");
+    expect(blankRecord("11/01/2026", profile, holidayCalendar).dayType).toBe("HOLIDAY");
+    expect(blankRecord("11/02/2026", profile, holidayCalendar).dayType).toBe("WORKDAY");
   });
 
   it("creates date ranges and finds records", () => {

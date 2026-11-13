@@ -1,17 +1,19 @@
 import { useMemo, useState } from "react";
 import { ArrowRight, CalendarDays, Clock3, Coffee, FileSpreadsheet, ListChecks, Plus, Sun, Table2 } from "lucide-react";
-import type { DailyRecord, DayType, Period } from "../api";
+import type { DailyRecord, DayType, HolidayCalendar, Period } from "../api";
 import { Badge, Button, Card, CardHeader, EmptyState, InlineAlert, MetricCard, PageHeader, cn, type BadgeTone } from "../components/ui";
 import { messages as m } from "../constants/messages";
 import type { Completion, DateEntry, MissingSummary } from "../domain/period";
 import { displayToIso, formatMonthDay, formatRangeLabel, formatWeekday, periodKindLabel } from "../domain/date";
 import { dayTypeLabel, hours, pluralize } from "../domain/format";
 import { sumRecords } from "../domain/records";
+import { nonWorkingHolidayForDate } from "../domain/holidays";
 
 type ReviewFilter = "all" | "workday" | "rest" | "leave" | "overtime";
 
 type ReviewViewProps = {
   period: Period;
+  holidayCalendar?: HolidayCalendar;
   entries: DateEntry[];
   completion: Completion;
   missingSummary: MissingSummary;
@@ -48,7 +50,7 @@ const valueCells = [
   { key: "holidayMinutes", label: "Holiday" }
 ] as const;
 
-export const ReviewView = ({ period, entries, completion, missingSummary, nextMissing, onSelect, onGoTo }: ReviewViewProps) => {
+export const ReviewView = ({ period, holidayCalendar, entries, completion, missingSummary, nextMissing, onSelect, onGoTo }: ReviewViewProps) => {
   const [filter, setFilter] = useState<ReviewFilter>("all");
   const savedRecords = useMemo(() => entries.flatMap((entry) => entry.record ? [entry.record] : []), [entries]);
   const totals = useMemo(() => sumRecords(savedRecords), [savedRecords]);
@@ -154,7 +156,10 @@ export const ReviewView = ({ period, entries, completion, missingSummary, nextMi
                         <time dateTime={displayToIso(record.workDate)} className="block font-semibold text-ink">{formatMonthDay(record.workDate)}</time>
                         <span className="mt-0.5 block text-[11px] font-normal text-muted">{formatWeekday(record.workDate, "long")}</span>
                       </th>
-                      <td className="whitespace-nowrap px-3 py-3"><Badge tone={dayTone(record.dayType)}>{dayTypeLabel(record.dayType)}</Badge></td>
+                      <td className="whitespace-nowrap px-3 py-3">
+                        <Badge tone={dayTone(record.dayType)}>{dayTypeLabel(record.dayType)}</Badge>
+                        {record.dayType === "WORKDAY" && nonWorkingHolidayForDate(holidayCalendar, record.workDate) && <Badge tone="warning" className="ml-1.5">Holiday conflict</Badge>}
+                      </td>
                       {valueCells.map((cell) => <td key={cell.key} className="whitespace-nowrap px-3 py-3 text-right font-medium text-ink tabular">{hours(record[cell.key])}</td>)}
                       <td className="px-3 py-3 text-right"><Button size="sm" variant="ghost" aria-label={`Edit entry for ${formatMonthDay(record.workDate)}`} onClick={() => onSelect(record.workDate)}>Edit</Button></td>
                     </tr>
@@ -169,7 +174,10 @@ export const ReviewView = ({ period, entries, completion, missingSummary, nextMi
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-ink">{formatMonthDay(record.workDate)} <span className="font-normal text-muted">· {formatWeekday(record.workDate)}</span></h3>
-                      <div className="mt-1"><Badge tone={dayTone(record.dayType)}>{dayTypeLabel(record.dayType)}</Badge></div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <Badge tone={dayTone(record.dayType)}>{dayTypeLabel(record.dayType)}</Badge>
+                        {record.dayType === "WORKDAY" && nonWorkingHolidayForDate(holidayCalendar, record.workDate) && <Badge tone="warning">Holiday conflict</Badge>}
+                      </div>
                     </div>
                     <Button size="sm" variant="secondary" aria-label={`Edit entry for ${formatMonthDay(record.workDate)}`} onClick={() => onSelect(record.workDate)}>Edit</Button>
                   </div>

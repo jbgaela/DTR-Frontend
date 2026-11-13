@@ -98,6 +98,10 @@ export const messages = Object.freeze({
   dailySaved: "Daily entry saved.",
   entryDeleted: "Daily entry deleted.",
   profileSaved: "Profile settings saved.",
+  holidayCalendarEstimateTitle: "Some holiday dates need official review",
+  holidayCalendarEstimateDescription: (years: string) => `Holiday candidates for ${years} are based on date-holidays and may change when Philippine proclamations are published. Check official dates before relying on them.`,
+  holidayWorkdayConflict: "This workday falls on a Philippine holiday. Review the holiday before saving.",
+  holidayWorkdayConflictBadge: "Holiday conflict",
   leaveSaved: "Leave request saved.",
   leaveDeleted: "Leave request deleted."
 });

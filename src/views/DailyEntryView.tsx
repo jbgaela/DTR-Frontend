@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, Save, Trash2, TriangleAlert } from "lucide-react";
-import type { DailyHours, DailyRecord, DailyRecordInput, Profile, Period } from "../api";
+import type { DailyHours, DailyRecord, DailyRecordInput, DaySaveResult, Holiday, HolidayAcknowledgement, HolidayCalendar, Profile, Period } from "../api";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { HolidayConflictDialog } from "../components/HolidayConflictDialog";
 import { Badge, Button, Card, CardHeader, CheckboxField, InlineAlert, PageHeader, SelectField, TextField, TextareaField, IconButton, cn } from "../components/ui";
 import { usePageDirty } from "../components/unsaved";
 import { messages as m } from "../constants/messages";
 import { applyShiftFallback, dailyFormSignature, dailyPayload, dailyPreviewInput, hasShiftFallback, overrideFields, recordStatus, taskLines, toDailyForm, type DailyForm, type OverrideKey } from "../domain/daily";
 import { displayToIso, formatLongDate, formatRangeLabel, isoToDisplay, periodKindLabel } from "../domain/date";
 import { dayTypeLabel, formatClock, hours } from "../domain/format";
+import { nonWorkingHolidayForDate } from "../domain/holidays";
 import { blankRecord, shiftDefaults, toHours, type DailyRecordValue } from "../domain/records";
 import { firstErrorKey, validateDaily, type FieldErrors } from "../domain/validation";
 import { useDailyHoursPreview } from "../hooks/useDailyHoursPreview";
@@ -16,11 +18,12 @@ type DailyEntryViewProps = {
   record: DailyRecordValue;
   profile: Profile;
   period: Period;
+  holidayCalendar?: HolidayCalendar;
   dates: string[];
   selectedDate: string;
   today: string;
   onDate: (date: string) => void;
-  onSave: (record: DailyRecordInput) => Promise<DailyRecord | null>;
+  onSave: (record: DailyRecordInput, acknowledgement?: HolidayAcknowledgement) => Promise<DaySaveResult>;
   onClear: () => Promise<boolean>;
   saving: boolean;
   clearing: boolean;
@@ -40,11 +43,13 @@ const summaryRows = (value: DailyHours | null) => [
 
 const fieldIdFor = (key: string) => overrideFields.some((field) => field.key === key) ? `daily-override-${key}` : `daily-${key}`;
 
-export const DailyEntryView = ({ record, profile, period, dates, selectedDate, today, onDate, onSave, onClear, saving, clearing }: DailyEntryViewProps) => {
+export const DailyEntryView = ({ record, profile, period, holidayCalendar, dates, selectedDate, today, onDate, onSave, onClear, saving, clearing }: DailyEntryViewProps) => {
   const [form, setForm] = useState<DailyForm>(() => toDailyForm(record));
   const [baseline, setBaseline] = useState<DailyForm>(() => toDailyForm(record));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmedHolidayVersion, setConfirmedHolidayVersion] = useState("");
+  const [holidayPrompt, setHolidayPrompt] = useState<{ calendarVersion: string; holidays: Holiday[] } | null>(null);
   const [confirmed, setConfirmed] = useState(() => {
     const input = dailyPreviewInput(toDailyForm(record));
     return { signature: JSON.stringify(input), hours: toHours(record) };
@@ -57,6 +62,8 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
     setBaseline(next);
     setErrors({});
     setDeleteOpen(false);
+    setConfirmedHolidayVersion("");
+    setHolidayPrompt(null);
     setConfirmed({ signature: JSON.stringify(dailyPreviewInput(toDailyForm(record))), hours: toHours(record) });
   }, [period.id, selectedDate, identity]);
 
@@ -79,12 +86,15 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
   const tasks = taskLines(form.tasksText);
   const invalidCount = Object.keys(errors).length;
   const workdayShortfall = Boolean(displayHours && effectiveForm.dayType === "WORKDAY" && effectiveForm.clockInMinute !== null && effectiveForm.clockOutMinute !== null && displayHours.regularMinutes < 480);
+  const workdayHoliday = form.dayType === "WORKDAY" ? nonWorkingHolidayForDate(holidayCalendar, selectedDate) : null;
+  const saveDisabled = saved && !dirty && !usingShiftFallback && (!workdayHoliday || confirmedHolidayVersion === holidayCalendar?.version);
   const canPreview = preview.enabled;
   const previewLabel = showingConfirmed ? "Saved" : preview.state === "calculating" ? "Calculating" : preview.state === "error" ? "Unavailable" : canPreview ? "Preview" : "No preview";
 
   const setOverride = (key: OverrideKey, value: number) => setForm((current) => ({ ...current, override: { ...current.override, [key]: value } }));
 
   const changeDayType = (value: DailyForm["dayType"]) => {
+    setConfirmedHolidayVersion("");
     setForm((current) => ({
       ...current,
       dayType: value,
@@ -100,29 +110,62 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
     setErrors({});
   };
 
-  const handleSave = async () => {
+  const saveForm = async (acknowledgement?: HolidayAcknowledgement): Promise<boolean> => {
     const formToSave = applyShiftFallback(form, profile);
     const nextErrors = validateDaily(formToSave);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       const first = firstErrorKey(nextErrors);
       if (first) window.requestAnimationFrame(() => document.getElementById(fieldIdFor(first))?.focus());
-      return;
+      return false;
     }
-    const savedRecord = await onSave(dailyPayload(formToSave));
-    if (savedRecord) {
+    const result = await onSave(dailyPayload(formToSave), acknowledgement);
+    if (result.status === "holiday-confirmation-required") {
+      setHolidayPrompt({ calendarVersion: result.calendarVersion, holidays: result.holidays });
+      return false;
+    }
+    if (result.status === "saved") {
+      const savedRecord = result.record;
       const next = toDailyForm(savedRecord);
       setForm(next);
       setBaseline(next);
       setConfirmed({ signature: JSON.stringify(dailyPreviewInput(toDailyForm(savedRecord))), hours: toHours(savedRecord) });
       setErrors({});
+      setHolidayPrompt(null);
+      return true;
     }
+    return false;
+  };
+
+  const handleSave = async () => {
+    if (workdayHoliday) {
+      if (!confirmedHolidayVersion || confirmedHolidayVersion !== holidayCalendar?.version) {
+        setHolidayPrompt({ calendarVersion: holidayCalendar?.version ?? "", holidays: [workdayHoliday] });
+        return;
+      }
+      await saveForm({ date: selectedDate, calendarVersion: confirmedHolidayVersion });
+      return;
+    }
+    await saveForm();
+  };
+
+  const handleConfirmWorkday = async () => {
+    if (!holidayPrompt) return;
+    const acknowledgement = { date: selectedDate, calendarVersion: holidayPrompt.calendarVersion };
+    setHolidayPrompt(null);
+    const saved = await saveForm(acknowledgement);
+    if (saved) setConfirmedHolidayVersion(acknowledgement.calendarVersion);
+  };
+
+  const handleChangeToHoliday = () => {
+    changeDayType("HOLIDAY");
+    setHolidayPrompt(null);
   };
 
   const handleDelete = async () => {
     const deleted = await onClear();
     if (deleted) {
-      const blank = blankRecord(selectedDate, profile);
+      const blank = blankRecord(selectedDate, profile, holidayCalendar);
       const next = toDailyForm(blank);
       setForm(next);
       setBaseline(next);
@@ -155,6 +198,12 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
           </div>
         }
       />
+
+      {workdayHoliday && (
+        <InlineAlert tone="warning" title={m.holidayWorkdayConflictBadge}>
+          {m.holidayWorkdayConflict} {workdayHoliday.name}.
+        </InlineAlert>
+      )}
 
       {invalidCount > 0 && (
         <InlineAlert tone="danger" title="Check the highlighted fields">
@@ -303,7 +352,7 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
           <Card>
             <CardHeader title="Actions" description={saved ? "This date has a stored record." : "This date has no stored record yet."} />
             <div className="grid gap-2.5">
-              <Button className="w-full" size="lg" loading={saving} disabled={saved && !dirty && !usingShiftFallback} onClick={() => void handleSave()} icon={<Save className="size-4" aria-hidden="true" />}>{saving ? "Saving entry..." : m.saveEntry}</Button>
+              <Button className="w-full" size="lg" loading={saving} disabled={saveDisabled} onClick={() => void handleSave()} icon={<Save className="size-4" aria-hidden="true" />}>{saving ? "Saving entry..." : m.saveEntry}</Button>
               <Button className="w-full" variant="secondary" disabled={!dirty || saving} onClick={reset} icon={<RotateCcw className="size-4" aria-hidden="true" />}>{saved ? "Discard changes" : "Clear draft"}</Button>
               {saved && <Button className="w-full" variant="danger-soft" loading={clearing} disabled={saving} onClick={() => setDeleteOpen(true)} icon={<Trash2 className="size-4" aria-hidden="true" />}>{clearing ? "Deleting entry..." : "Delete entry"}</Button>}
             </div>
@@ -314,6 +363,15 @@ export const DailyEntryView = ({ record, profile, period, dates, selectedDate, t
           </Card>
         </aside>
       </div>
+
+      <HolidayConflictDialog
+        open={Boolean(holidayPrompt)}
+        holidays={holidayPrompt?.holidays ?? []}
+        busy={saving}
+        onCancel={() => setHolidayPrompt(null)}
+        onChangeToHoliday={handleChangeToHoliday}
+        onSaveAsWorkday={() => void handleConfirmWorkday()}
+      />
 
       <ConfirmDialog
         open={deleteOpen}

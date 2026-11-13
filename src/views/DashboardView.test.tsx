@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { DailyRecord, Period, Profile } from "../api";
+import type { DailyRecord, HolidayCalendar, Period, Profile } from "../api";
 import { buildDateEntries, completionFor, missingSummaryFor } from "../domain/period";
 import { sumRecords } from "../domain/records";
 import { DashboardView } from "./DashboardView";
@@ -146,6 +146,34 @@ describe("DashboardView", () => {
     expect(screen.getByText("Every date through today is entered")).toBeInTheDocument();
     expect(screen.getByText(/upcoming date/)).toBeInTheDocument();
     expect(screen.queryByText("Today's entry is open")).not.toBeInTheDocument();
+  });
+
+  it("marks a saved workday that overlaps a non-working holiday", () => {
+    const holidayCalendar: HolidayCalendar = {
+      version: "ph-national-2026-v1",
+      status: "REVIEWED",
+      years: [{ year: 2026, status: "REVIEWED" }],
+      holidays: [{ date: "2026-10-25", name: "Synthetic Holiday", classification: "SPECIAL_NON_WORKING", isNonWorking: true, source: "OFFICIAL_PROCLAMATION", sourceUrl: "https://example.gov.ph" }]
+    };
+    const saved = record("10/25/2026");
+    const entries = buildDateEntries(dates, [saved], today);
+
+    render(
+      <DashboardView
+        profile={profile}
+        period={{ ...period, dailyRecords: [saved] }}
+        holidayCalendar={holidayCalendar}
+        entries={entries}
+        completion={completionFor(entries)}
+        missingSummary={missingSummaryFor(entries)}
+        totals={sumRecords([saved])}
+        today={today}
+        onSelect={vi.fn()}
+        onGoTo={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Holiday conflict")).toBeInTheDocument();
   });
 });
 

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useBlocker, useLocation, useNavigate } from "r
 import { Globe2, Menu } from "lucide-react";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { ErrorState } from "./components/ErrorState";
+import { HolidayCalendarNotice } from "./components/HolidayCalendarNotice";
 import { LoadingState } from "./components/LoadingState";
 import { MobileNavigation } from "./components/MobileNavigation";
 import { PeriodSelector } from "./components/PeriodSelector";
@@ -199,6 +200,7 @@ export const App = () => {
                 {state.error}
               </InlineAlert>
             )}
+            <HolidayCalendarNotice calendar={state.holidayCalendar} className="mb-5" />
 
             <Suspense fallback={<PageSkeleton />}>
               <Routes>
@@ -206,6 +208,7 @@ export const App = () => {
                 <DashboardView
                   profile={state.profile}
                   period={state.period}
+                  holidayCalendar={state.holidayCalendar}
                   entries={state.entries}
                   completion={state.completion}
                   missingSummary={state.missingSummary}
@@ -220,6 +223,7 @@ export const App = () => {
                   record={state.currentRecord}
                   profile={state.profile}
                   period={state.period}
+                  holidayCalendar={state.holidayCalendar}
                   dates={state.dates}
                   selectedDate={state.selectedDate}
                   today={state.today}
@@ -233,6 +237,7 @@ export const App = () => {
               <Route path="/review" element={
                 <ReviewView
                   period={state.period}
+                  holidayCalendar={state.holidayCalendar}
                   entries={state.entries}
                   completion={state.completion}
                   missingSummary={state.missingSummary}
